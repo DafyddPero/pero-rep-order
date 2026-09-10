@@ -649,7 +649,7 @@ function PeroProduct({ row, vat, quantities, setQty }) {
   if (items.length === 0) return null;
   
   return (
-    <div style={s.productRow}>
+    <div style={s.productRow(null)}>
       <div style={s.productName}>{name}</div>
       <div style={s.sizeGroup}>
         {items.map(({ sku, size, price }) => (
@@ -774,6 +774,7 @@ export default function App() {
     c.tr = orderList.filter(i => i.sku.startsWith("TRT") || ["SR0466","SR0467","SR0468","SR0469","SR0470","SR0471","SR0473","SR0474","SR0277","sr0543"].some(p => i.sku === p)).reduce((s,i) => s + i.qty, 0);
     c.tb = orderList.filter(i => i.sku.startsWith("TRT") || i.sku.startsWith("SR04") || i.sku.startsWith("SR05")).reduce((s,i) => s + i.qty, 0);
     c.mt = orderList.filter(i => i.sku.includes("X7")).reduce((s,i) => s + i.qty, 0);
+    c.pero = orderList.filter(i => /^P00(38|39|40|37|18|19|71|72|73|74|75|76|77|78|79|80|81|82)/.test(i.sku) || i.sku.startsWith("TRU")).reduce((s,i) => s + i.qty, 0);
     c.cat = orderList.filter(i => i.sku === "SR0164" || i.sku === "SR0216").reduce((s,i) => s + i.qty, 0);
     return c;
   }, [orderList]);
@@ -977,7 +978,13 @@ export default function App() {
           ))}
         </CategorySection>
 
-        {/* PERO / TRULINE - now in Working Dog section above */}
+        {/* PERO / TRULINE (Premium — High Meat range + Truline).
+            Premiwm/Active/Maintenance live in Working Dog above. */}
+        <CategorySection title="Pero / Truline (Premium)" count={catCounts.pero} open={openCats.pero} onToggle={() => toggleCat("pero")}>
+          {PERO.map((row, i) => (
+            <PeroProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} />
+          ))}
+        </CategorySection>
 
         {/* MEAL TOPPERS */}
         <CategorySection title="Meal Toppers" count={catCounts.mt} open={openCats.mt} onToggle={() => toggleCat("mt")}>
@@ -996,7 +1003,7 @@ export default function App() {
         {/* COLLAPSE/EXPAND ALL */}
         <div style={{ display: "flex", gap: 8, padding: "16px 12px" }}>
           <button onClick={() => {
-            const allCats = ['gf', 'wgf', 'wd', 'gl', 'cp', 'wt', 'spwt', 'tr', 'tb', 'mt', 'cat'];
+            const allCats = ['gf', 'wgf', 'wd', 'gl', 'cp', 'wt', 'spwt', 'tr', 'tb', 'pero', 'mt', 'cat'];
             setOpenCats(allCats.reduce((acc, cat) => ({ ...acc, [cat]: true }), {}));
           }} style={{ flex: 1, ...s.reviewBtn }}>
             Expand All
