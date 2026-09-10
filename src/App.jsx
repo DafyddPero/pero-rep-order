@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, memo } from "react";
 
 // ── PRODUCT DATA ──
 const GF = [
@@ -56,7 +56,9 @@ const CP = [
 ["Lamb & Sweet Potato","lamb","CP019","CP020","CP021",6.38,15.94,38.26],
 ["Turkey Gastro","turkey","CP022","CP023","CP024",6.45,16.12,38.70],
 ["Salmon & Sweet Potato","salmon","CP025","CP026","CP027",6.86,17.16,41.17],
-["Immunity Booster","mixed","CP031","CP032","CP033",6.86,17.16,41.17]
+["Immunity Booster","mixed","CP031","CP032","CP033",6.86,17.16,41.17],
+["Rabbit & Sweet Potato","rabbit","CP043","CP044","CP045",10.27,25.68,61.63],
+["Insect Protein & Sweet Potato","insect","CP046","CP047","CP048",5.91,15.78,36.29]
 ];
 
 // Working Dog.
@@ -69,11 +71,11 @@ const WD = [
 {name:"Economy Lamb & Rice", wd:"SR0353", vat:"SR0353V", price:19.35, size:"15kg", pallet:65},
 {name:"Resting/Senior with Chicken", wd:"SR0398", vat:"SR0398V", price:19.56, size:"15kg", pallet:65},
 {name:"Puppy with Chicken", wd:"SR0352", vat:"SR0352V", price:18.01, size:"15kg", pallet:65},
-{name:"Meaty Mix", wd:"SR0118", vat:"SR0118V", price:19.40, size:"15kg", pallet:65},
-{name:"Muesli Mix", wd:"SR0109", vat:"SR0109V", price:17.91, size:"15kg", pallet:65},
-{name:"Celt 22 (Plain Label)", wd:"SR0450", vat:"SR0450V", price:13.95, size:"15kg", pallet:65},
-{name:"Celt 22 (Private Label)", wd:"SR0451", vat:"SR0451V", price:12.74, size:"15kg", pallet:65},
-{name:"Celt Canned Wet (Dogs)", wd:"C0004", vat:"", price:0, size:"case", pallet:192, caseWeight:3.95},
+{name:"Meaty Mix", wd:"SR0118", vat:"", price:19.40, size:"15kg", pallet:65},
+{name:"Muesli Mix", wd:"SR0109", vat:"", price:17.91, size:"15kg", pallet:65},
+{name:"Celt 22 (Celt Label)", wd:"SR0450", vat:"", price:13.95, size:"15kg", pallet:60},
+{name:"Celt 22 (Own Label)", wd:"SR0451", vat:"", price:12.74, size:"15kg", pallet:60},
+{name:"Celt Canned Wet (Dogs)", wd:"C0004", vat:"", price:6.49, size:"case", pallet:192, caseWeight:3.95},
 {name:"Pero Premiwm", pero:true, wd:"", vat:"P0014", priceSmall:0, priceBig:20.25, sizeSmall:"", sizeBig:"15kg", pallet:65},
 {name:"Pero Active", pero:true, wd:"", vat:"P0020", priceSmall:0, priceBig:20.03, sizeSmall:"", sizeBig:"15kg", pallet:65},
 {name:"Pero Maintenance", pero:true, wd:"", vat:"P0021", priceSmall:0, priceBig:18.28, sizeSmall:"", sizeBig:"15kg", pallet:65}
@@ -135,110 +137,70 @@ const PERO = [
 ];
 
 const MT = [
-["Salmon Meal Topper","SR0486X7","7x160g"],
-["Beef Meal Topper","SR0494X7","7x160g"],
-["Turkey Meal Topper","SR0495X7","7x160g"],
-["Duck Meal Topper","SR0496X7","7x160g"],
-["Herring Meal Topper","SR0497X7","7x160g"],
-["Rabbit Meal Topper","SR0498X7","7x160g"]
+["Beef Meal Topper","SR0494X7","7x160g",19.19],
+["Turkey Meal Topper","SR0495X7","7x160g",20.36],
+["Duck Meal Topper","SR0496X7","7x160g",23.28],
+["Salmon Meal Topper","SR0486X7","7x160g",23.28],
+["Herring Meal Topper","SR0497X7","7x160g",25.03],
+["Rabbit Meal Topper","SR0498X7","7x160g",34.94]
 ];
 
-const CAT_PRODS = [
-["Cat Complete (Big)","SR0164","10kg","vat"],
-["Cat Complete (Small)","SR0216","2kg","vat"]
+// Cat dry: [name, sku_small, size_small, price_small, sku_big, size_big, price_big]
+const CAT_DRY = [
+["Cat Complete","SR0215","2kg",4.37,"SR0164","10kg",17.32]
 ];
+// Cat cans (price break + pallet handled like dog cans)
+const CAT_CAN = {name:"Celt Canned Wet (Cats)", sku:"C0005", price:6.70, pallet:192, caseWeight:3.95};
 
 
-// ── TREATS DATA ──
-// [groupName, [[sku, size], ...]]
-const TREATS_RETAIL = [
-["Beef Bites",[["TRT025","200g"]]],
-["Beef Gullet",[["TRT058","200g"]]],
-["Beef Strips",[["TRT073","200g"]]],
-["Beef Trachea",[["TRT061","200g"]]],
-["Chicken Bites",[["TRT022","200g"]]],
-["Chicken Breasts",[["TRT034","200g"]]],
-["Chicken Feet",[["TRT013","200g"]]],
-["Chicken Sticks",[["SR0466","210g"]]],
-["Chicken Strips",[["TRT076","200g"]]],
-["Cod Skin Braids",[["TRT055","200g"]]],
-["Cod Skin Flatties",[["TRT019","200g"]]],
-["Cod Skin Rings",[["TRT052","200g"]]],
-["Cod Skin Twists",[["TRT049","200g"]]],
-["Duck Bites",[["TRT040","200g"]]],
-["Duck Strips",[["TRT082","200g"]]],
-["Fish Skin Bites",[["TRT067","200g"]]],
-["Fish Skin Cubes",[["SR0277","70g"]]],
-["Himalayan Cheese (Small)",[["TRT113","10pcs"]]],
-["Himalayan Cheese (Medium)",[["TRT114","5pcs"]]],
-["Himalayan Cheese Turmeric (Med)",[["TRT115","5pcs"]]],
-["Himalayan Cheese (Large)",[["TRT116","5pcs"]]],
-["Lamb Bites",[["TRT031","200g"]]],
-["Lamb Strips",[["TRT010","200g"]]],
-["Pig Ear Strips",[["TRT064","200g"]]],
-["Pig Ears (Medium)",[["TRT094","5pcs"]]],
-["Pig Ears (Large)",[["TRT097","5pcs"]]],
-["Pig Inner Ears",[["TRT088","200g"]]],
-["Rabbit Bites",[["TRT046","200g"]]],
-["Rabbit Ears with Fur",[["TRT001","200g"]]],
-["Rabbit Feet",[["TRT070","200g"]]],
-["Rabbit Strips",[["TRT085","200g"]]],
-["Beef Pizzles (Small)",[["TRT103","25pcs"]]],
-["Beef Pizzles (Medium)",[["TRT100","5pcs"],["TRT101","25pcs"]]],
-["Beef Pizzles (Large)",[["TRT105","25pcs"]]],
-["Dried Sprats",[["TRT004","200g"]]],
-["Turkey Bites",[["TRT037","200g"]]],
-["Turkey Strips",[["TRT079","200g"]]],
-["Venison Sausages",[["TRT091","200g"]]],
-["Venison Strips",[["TRT007","200g"]]],
-["Wild Boar Bites",[["TRT043","200g"]]],
-["Wild Boar Sticks",[["SR0469","210g"]]],
-["Wild Boar Strips",[["TRT016","200g"]]],
-["Rolled Hide Chew (Small)",[["TRT107","50pcs"],["TRT108","100pcs"]]],
-["Rolled Hide Chew (Medium)",[["sr0543","50pcs"],["TRT110","100pcs"]]],
-["Rolled Hide Chew (Large)",[["TRT111","50pcs"],["TRT112","100pcs"]]]
-];
-
-const TREATS_BULK = [
-["Beef Bites",[["TRT026","1kg"],["TRT027","20kg"]]],
-["Beef Gullet",[["TRT059","1kg"]]],
-["Beef Strips",[["TRT074","1kg"],["TRT075","10kg"]]],
-["Beef Trachea",[["TRT062","1kg"]]],
-["Chicken Bites",[["TRT023","1kg"],["TRT024","20kg"]]],
-["Chicken Breasts",[["TRT035","1kg"]]],
-["Chicken Feet",[["TRT014","1kg"],["TRT015","20kg"]]],
-["Chicken Sticks",[["SR0467","1kg"],["SR0468","8kg"]]],
-["Chicken Strips",[["TRT077","1kg"],["TRT078","10kg"]]],
-["Cod Skin Braids",[["TRT056","1kg"],["TRT057","15kg"]]],
-["Cod Skin Flatties",[["TRT020","1kg"],["TRT021","5kg"]]],
-["Cod Skin Rings",[["TRT053","1kg"],["TRT054","15kg"]]],
-["Duck Bites",[["TRT041","1kg"],["TRT042","20kg"]]],
-["Duck Strips",[["TRT083","1kg"],["TRT084","10kg"]]],
-["Dried Sprats",[["TRT005","1kg"],["TRT006","15kg"]]],
-["Lamb Bites",[["TRT032","1kg"],["TRT033","20kg"]]],
-["Lamb Strips",[["TRT011","1kg"],["TRT012","10kg"]]],
-["Pig Ear Strips",[["TRT065","1kg"]]],
-["Pig Ears (Medium)",[["TRT095","50pcs"],["TRT096","100pcs"]]],
-["Pig Ears (Large)",[["TRT098","50pcs"],["TRT099","100pcs"]]],
-["Pig Inner Ears",[["TRT089","5kg"],["TRT090","10kg"]]],
-["Pig Shoulder Bone",[["TRT117","50pcs"]]],
-["Beef Ears with Hair",[["TRT118","60pcs"]]],
-["Beef Leg Bone",[["TRT119","25pcs"]]],
-["Beef Pizzles (Small)",[["SR0552","100pcs"]]],
-["Beef Pizzles (Medium)",[["SR0554","100pcs"]]],
-["Beef Pizzles (Large)",[["SR0556","100pcs"]]],
-["Rabbit Bites",[["TRT048","10kg"]]],
-["Rabbit Ears with Fur",[["TRT002","1kg"],["TRT003","10kg"]]],
-["Rabbit Feet",[["TRT071","1kg"],["TRT072","20kg"]]],
-["Rabbit Strips",[["TRT086","1kg"],["TRT087","10kg"]]],
-["Salmon Skin Twister",[["SR0473","1kg"],["SR0474","10kg"]]],
-["Turkey Bites",[["TRT038","1kg"],["TRT039","20kg"]]],
-["Turkey Strips",[["TRT080","1kg"],["TRT081","10kg"]]],
-["Venison Sausages",[["TRT092","2.5kg"],["TRT093","10kg"]]],
-["Venison Strips",[["TRT008","1kg"],["TRT009","10kg"]]],
-["Wild Boar Bites",[["TRT044","1kg"],["TRT045","20kg"]]],
-["Wild Boar Sticks",[["SR0470","1kg"],["SR0471","8kg"]]],
-["Wild Boar Strips",[["TRT017","1kg"],["TRT018","10kg"]]]
+// ── TREATS DATA (unified) ──
+// [name, [[sku, sizeLabel, price], ... up to 3 order sizes]]
+// Sizes run small→large: Retail Pack (200g/5pcs) · Bulk Bag (1kg/50pcs) · Bulk Box (multi-kg/100pcs)
+const TREATS = [
+["Rabbit Ears with Fur",[["TRT001","200g",4.50],["TRT002","1kg",11.00],["TRT003","10kg",100.00]]],
+["Dried Sprats",[["TRT004","200g",4.50],["TRT005","1kg",14.89],["TRT006","15kg",200.00]]],
+["Venison Strips",[["TRT007","200g",5.00],["TRT008","1kg",14.00],["TRT009","10kg",130.00]]],
+["Lamb Strips",[["TRT010","200g",4.50],["TRT011","1kg",14.00],["TRT012","10kg",130.00]]],
+["Chicken Feet",[["TRT013","200g",2.50],["TRT014","1kg",5.00],["TRT015","20kg",90.00]]],
+["Wild Boar Strips",[["TRT016","200g",4.50],["TRT017","1kg",14.00],["TRT018","10kg",130.00]]],
+["Cod Skin Flatties",[["TRT019","200g",5.00],["TRT020","1kg",18.50],["TRT021","5kg",85.00]]],
+["Chicken Bites",[["TRT022","200g",4.50],["TRT023","1kg",15.00],["TRT024","20kg",280.00]]],
+["Beef Bites",[["TRT025","200g",4.50],["TRT026","1kg",15.00],["TRT027","20kg",280.00]]],
+["Venison Bites",[["TRT028","200g",5.00],["TRT029","1kg",17.00],["TRT030","20kg",320.00]]],
+["Lamb Bites",[["TRT031","200g",5.00],["TRT032","1kg",17.00],["TRT033","20kg",320.00]]],
+["Chicken Breasts",[["TRT034","200g",5.00],["TRT035","1kg",17.00],["TRT036","12kg",190.00]]],
+["Turkey Bites",[["TRT037","200g",4.50],["TRT038","1kg",15.00],["TRT039","20kg",280.00]]],
+["Duck Bites",[["TRT040","200g",5.00],["TRT041","1kg",15.00],["TRT042","20kg",280.00]]],
+["Wild Boar Bites",[["TRT043","200g",4.50],["TRT044","1kg",17.00],["TRT045","20kg",320.00]]],
+["Rabbit Bites",[["TRT046","200g",5.00],["TRT047","1kg",16.00],["TRT048","10kg",150.00]]],
+["Cod Skin Twists",[["TRT049","200g",5.00],["TRT050","1kg",19.00],["TRT051","5kg",90.00]]],
+["Cod Skin Rings",[["TRT052","200g",5.00],["TRT053","1kg",19.00],["TRT054","15kg",270.00]]],
+["Cod Skin Braids",[["TRT055","200g",5.00],["TRT056","1kg",18.00],["TRT057","15kg",255.00]]],
+["Beef Gullet",[["TRT058","200g",6.00],["TRT059","1kg",17.00]]],
+["Beef Trachea",[["TRT061","200g",3.75],["TRT062","1kg",7.50],["TRT063","12kg",80.00]]],
+["Pig Ear Strips",[["TRT064","200g",5.00],["TRT065","1kg",18.00],["TRT066","13kg",210.00]]],
+["Fish Skin Bites",[["TRT067","200g",5.25],["TRT068","1kg",20.00]]],
+["Rabbit Feet",[["TRT070","200g",4.00],["TRT071","1kg",10.15],["TRT072","20kg",180.00]]],
+["Beef Strips",[["TRT073","200g",4.50],["TRT074","1kg",14.00],["TRT075","10kg",130.00]]],
+["Chicken Strips",[["TRT076","200g",4.50],["TRT077","1kg",14.00],["TRT078","10kg",130.00]]],
+["Turkey Strips",[["TRT079","200g",4.50],["TRT080","1kg",14.00],["TRT081","10kg",130.00]]],
+["Duck Strips",[["TRT082","200g",5.00],["TRT083","1kg",14.00],["TRT084","10kg",130.00]]],
+["Rabbit Strips",[["TRT085","200g",5.00],["TRT086","1kg",14.00],["TRT087","10kg",130.00]]],
+["Pig Inner Ears",[["TRT088","200g",2.75],["TRT089","5kg",14.00],["TRT090","10kg",40.00]]],
+["Venison Sausages",[["TRT091","200g",4.50],["TRT092","2.5kg",35.00],["TRT093","10kg",120.00]]],
+["Pig Ears (Medium)",[["TRT094","5pcs",5.50],["TRT095","50pcs",29.00],["TRT096","100pcs",57.00]]],
+["Pig Ears (Large)",[["TRT097","5pcs",6.50],["TRT098","50pcs",33.50],["TRT099","100pcs",66.00]]],
+["Bully Pizzles (Medium)",[["TRT100","5pcs",6.75],["TRT101","25pcs",30.00],["TRT102","50pcs",55.00]]],
+["Yak Milk Chews (Small)",[["TRT113","pack",9.00]]],
+["Yak Milk Chews (Medium)",[["TRT114","pack",9.00]]],
+["Yak Milk Chews w/Turmeric (Med)",[["TRT115","pack",11.00]]],
+["Yak Milk Chews (Large)",[["TRT116","pack",12.00]]],
+["Rolled Hide Chew (Small)",[["TRT107","50pcs",17.50],["TRT108","100pcs",32.00]]],
+["Rolled Hide Chew (Medium)",[["TRT109","50pcs",38.00],["TRT110","100pcs",65.00]]],
+["Rolled Hide Chew (Large)",[["TRT111","50pcs",65.00],["TRT112","100pcs",115.00]]],
+["Pig Shoulder Bone",[["TRT117","50pcs",24.00]]],
+["Beef Ears with Hair",[["TRT118","60pcs",42.00]]],
+["Beef Leg Bone",[["TRT119","25pcs",38.00]]]
 ];
 
 
@@ -300,6 +262,29 @@ function getWGFSmallLabel(row) {
   return has25 ? "2.5kg" : "2kg";
 }
 
+// ── QUANTITY PRICE BREAKS (unit price drops at higher quantities) ──
+// Keyed by base SKU. Tiers: [minQtyForThisPrice, unitPrice] in ascending order.
+const PRICE_BREAKS = {
+  SR0118: { base: 19.40, tiers: [[130, 18.40], [195, 15.50]] }, // Meaty Mix 15kg
+  SR0109: { base: 17.91, tiers: [[130, 16.88], [195, 14.94]] }, // Muesli Mix 15kg
+  SR0450: { base: 13.95, tiers: [[60, 12.49], [180, 11.95]] },  // Celt 22 (Celt label)
+  SR0451: { base: 12.74, tiers: [[180, 12.20]] },               // Celt 22 (own label, min 60)
+  C0004:  { base: 6.49,  tiers: [[192, 6.28]] },                // Celt tins (dogs)
+  C0005:  { base: 6.70,  tiers: [[192, 6.49]] },                // Celt tins (cats)
+};
+
+const baseSkuOf = (sku) => sku.replace(/-PLT$/, "");
+
+function tierPrice(baseSku, totalQty) {
+  const pb = PRICE_BREAKS[baseSku];
+  if (!pb) return null;
+  let price = pb.base;
+  for (const [threshold, p] of pb.tiers) {
+    if (totalQty >= threshold) price = p;
+  }
+  return price;
+}
+
 function weightOf(size) {
   if (!size) return 0;
   let m = size.match(/([0-9.]+)\s*kg/);
@@ -327,9 +312,9 @@ function carriageCalc(weight, value) {
 }
 
 // ── DYSLEXIA-FRIENDLY FONT IMPORT ──
-const fontStyle = document.createElement('style');
-fontStyle.textContent = `@import url('https://fonts.googleapis.com/css2?family=OpenDyslexic:wght@400;700&display=swap');`;
 if (typeof document !== 'undefined' && !document.querySelector('style[data-dyslexic]')) {
+  const fontStyle = document.createElement('style');
+  fontStyle.textContent = `@import url('https://fonts.googleapis.com/css2?family=OpenDyslexic:wght@400;700&display=swap');`;
   fontStyle.setAttribute('data-dyslexic', 'true');
   document.head.appendChild(fontStyle);
 }
@@ -403,7 +388,7 @@ const s = {
   label: { fontSize: 14, fontWeight: 700, color: colors.text, display: "block", marginBottom: 6, fontFamily, letterSpacing: 0.1 },
   toggleRow: { display: "flex", gap: 8, marginTop: 12 },
   toggleBtn: (active) => ({ flex: 1, padding: "12px 8px", border: `3px solid ${active ? colors.primary : colors.border}`, borderRadius: 12, background: active ? colors.primaryLight : "#fff", color: active ? colors.primary : colors.textMid, fontWeight: 700, fontSize: 15, cursor: "pointer", textAlign: "center", transition: "all 0.15s", fontFamily, letterSpacing: 0.1 }),
-  catHeader: (open) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px", background: "#fff", borderRadius: open ? "10px 10px 0 0" : 10, border: `2px solid ${colors.border}`, borderBottom: open ? `2px solid ${colors.border}` : `2px solid ${colors.border}`, cursor: "pointer", userSelect: "none", marginTop: 12 }),
+  catHeader: (open) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: "#fff", borderRadius: open ? "10px 10px 0 0" : 10, border: `2px solid ${colors.border}`, borderBottom: open ? `2px solid ${colors.border}` : `2px solid ${colors.border}`, cursor: "pointer", userSelect: "none", marginTop: 6 }),
   catTitle: { fontWeight: 700, fontSize: 16, fontFamily, letterSpacing: 0.1 },
   catBadge: (n) => ({ fontSize: 11, fontWeight: 700, background: n > 0 ? colors.primary : colors.border, color: n > 0 ? "#fff" : colors.textMid, borderRadius: 20, padding: "2px 8px", minWidth: 20, textAlign: "center" }),
   catBody: { background: "#fff", borderRadius: "0 0 10px 10px", border: `1px solid ${colors.border}`, borderTop: "none", padding: "4px 0" },
@@ -415,7 +400,14 @@ const s = {
   sizeLabel: (isPallet) => ({ fontSize: 11, color: isPallet ? colors.accent : colors.textMid, fontWeight: 700, fontFamily, letterSpacing: 0.1 }),
   qtyControl: { display: "flex", alignItems: "center", gap: 0, borderRadius: 8, overflow: "hidden", border: `1px solid ${colors.border}` },
   qtyBtn: { width: 38, height: 38, border: "none", background: colors.bg, color: colors.text, fontSize: 20, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily },
+  qtyBtnSm: { width: 32, height: 36, border: "none", background: colors.bg, color: colors.text, fontSize: 18, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily },
   qtyVal: (v) => ({ width: 36, textAlign: "center", fontSize: 16, fontWeight: 700, color: v > 0 ? colors.primary : colors.textLight, background: v > 0 ? colors.primaryLight : "#fff", height: 38, lineHeight: "38px", borderLeft: `1px solid ${colors.border}`, borderRight: `1px solid ${colors.border}`, fontFamily }),
+  qtyValSm: (v) => ({ width: 30, textAlign: "center", fontSize: 15, fontWeight: 700, color: v > 0 ? colors.primary : colors.textLight, background: v > 0 ? colors.primaryLight : "#fff", height: 36, lineHeight: "36px", borderLeft: `1px solid ${colors.border}`, borderRight: `1px solid ${colors.border}`, fontFamily }),
+  stepperWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
+  stepperPrice: { fontSize: 10, color: colors.textMid, fontWeight: 700, fontFamily },
+  // Stacked layout: product name on its own line, size counters wrap below within the frame
+  stackedRow: { padding: "12px 14px", borderBottom: `1px solid ${colors.bg}` },
+  stackedSizes: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8, justifyContent: "flex-start" },
   bottomBar: { position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderTop: `3px solid ${colors.primary}`, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 200, boxShadow: "0 -4px 20px rgba(0,0,0,0.08)" },
   reviewBtn: { background: colors.primary, color: "#fff", border: "none", borderRadius: 12, padding: "14px 24px", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily, letterSpacing: 0.1 },
   modal: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" },
@@ -434,15 +426,22 @@ const s = {
 
 
 // ── COMPONENTS ──
-function QtyControl({ value, onChange, step = 1 }) {
+// Memoised stepper: re-renders only when its own quantity changes, not on every
+// keystroke elsewhere. onSet must be stable (the app's setQty is useCallback []).
+const Stepper = memo(function Stepper({ sku, qtyValue, price, desc, weight, step = 1, onSet, priceLabel, compact }) {
+  const btn = compact ? s.qtyBtnSm : s.qtyBtn;
+  const val = compact ? s.qtyValSm(qtyValue) : s.qtyVal(qtyValue);
   return (
-    <div style={s.qtyControl}>
-      <button style={s.qtyBtn} onClick={() => onChange(Math.max(0, value - step))}>−</button>
-      <div style={s.qtyVal(value)}>{value}</div>
-      <button style={s.qtyBtn} onClick={() => onChange(value + step)}>+</button>
+    <div style={s.stepperWrap}>
+      <div style={s.qtyControl}>
+        <button style={btn} onClick={() => onSet(sku, Math.max(0, qtyValue - step), price, desc, weight)}>−</button>
+        <div style={val}>{qtyValue}</div>
+        <button style={btn} onClick={() => onSet(sku, qtyValue + step, price, desc, weight)}>+</button>
+      </div>
+      {priceLabel ? <span style={s.stepperPrice}>{priceLabel}</span> : null}
     </div>
   );
-}
+});
 
 function CategorySection({ title, count, open, onToggle, children }) {
   const headerRef = useRef(null);
@@ -502,7 +501,7 @@ function MatrixProduct({ row, pkg, vat, quantities, setQty, cat }) {
           return (
             <div key={sz} style={s.sizeBox}>
               <span style={s.sizeLabel(false)}>{sizeLabel}</span>
-              <QtyControl value={quantities[key] || 0} onChange={v => setQty(key, v, res.price, name + " " + sizeLabel, weightOf(sizeLabel))} />
+              <Stepper sku={key} qtyValue={quantities[key] || 0} price={res.price} desc={name + " " + sizeLabel} weight={weightOf(sizeLabel)} onSet={setQty} priceLabel={res.price > 0 ? `£${res.price.toFixed(2)}` : "TBC"} />
             </div>
           );
         })}
@@ -513,23 +512,22 @@ function MatrixProduct({ row, pkg, vat, quantities, setQty, cat }) {
 
 function CPProduct({ row, vat, quantities, setQty }) {
   const name = row[0];
-  const protein = row[1];
   const sizes = [
     { label: "2kg", skuBase: row[2], price: row[5] },
     { label: "5kg", skuBase: row[3], price: row[6] },
     { label: "12kg", skuBase: row[4], price: row[7] },
   ];
-  
+
   return (
-    <div style={s.productRow(null)}>
+    <div style={s.stackedRow}>
       <div style={s.productName}>{name}</div>
-      <div style={s.sizeGroup}>
+      <div style={s.stackedSizes}>
         {sizes.map(({ label, skuBase, price }) => {
           const sku = vat === "vat" ? skuBase + "V" : skuBase;
           return (
             <div key={label} style={s.sizeBox}>
               <span style={s.sizeLabel(false)}>{label}</span>
-              <QtyControl value={quantities[sku] || 0} onChange={v => setQty(sku, v, price, "CP " + name + " " + label, weightOf(label))} />
+              <Stepper compact sku={sku} qtyValue={quantities[sku] || 0} price={price} desc={"CP " + name + " " + label} weight={weightOf(label)} onSet={setQty} priceLabel={price > 0 ? `£${price.toFixed(2)}` : "TBC"} />
             </div>
           );
         })}
@@ -546,7 +544,7 @@ function SimpleProduct({ name, sku, price, size, quantities, setQty }) {
       <div style={s.sizeGroup}>
         <div style={s.sizeBox}>
           <span style={s.sizeLabel(false)}>{size}</span>
-          <QtyControl value={quantities[sku] || 0} onChange={v => setQty(sku, v, price, name + " " + size, weightOf(size))} />
+          <Stepper sku={sku} qtyValue={quantities[sku] || 0} price={price} desc={name + " " + size} weight={weightOf(size)} onSet={setQty} priceLabel={price > 0 ? `£${price.toFixed(2)}` : "TBC"} />
         </div>
       </div>
     </div>
@@ -569,10 +567,15 @@ function ProductRow({ name, protein = null, cells, quantities, setQty }) {
             <span style={s.sizeLabel(c.isPallet)}>
               {c.isPallet ? `Pallet ×${c.palletQty}` : c.label}
             </span>
-            <QtyControl
-              value={quantities[c.key] || 0}
+            <Stepper
+              sku={c.key}
+              qtyValue={quantities[c.key] || 0}
               step={c.step || 1}
-              onChange={v => setQty(c.key, v, c.price, c.desc, c.weight)}
+              price={c.price}
+              desc={c.desc}
+              weight={c.weight}
+              onSet={setQty}
+              priceLabel={c.price > 0 ? `£${c.price.toFixed(2)}` : "TBC"}
             />
           </div>
         ))}
@@ -655,7 +658,7 @@ function PeroProduct({ row, vat, quantities, setQty }) {
         {items.map(({ sku, size, price }) => (
           <div key={sku} style={s.sizeBox}>
             <span style={s.sizeLabel(false)}>{size}</span>
-            <QtyControl value={quantities[sku] || 0} onChange={v => setQty(sku, v, price, name + " " + size, weightOf(size))} />
+            <Stepper sku={sku} qtyValue={quantities[sku] || 0} price={price} desc={name + " " + size} weight={weightOf(size)} onSet={setQty} priceLabel={price > 0 ? `£${price.toFixed(2)}` : "TBC"} />
           </div>
         ))}
       </div>
@@ -663,22 +666,37 @@ function PeroProduct({ row, vat, quantities, setQty }) {
   );
 }
 
-function WTProduct({ row, vat, quantities, setQty }) {
+function WTProduct({ row, quantities, setQty }) {
   const [name, , sku, price] = row;
-  const finalSku = vat === "vat" ? sku + "V" : sku;
-  return <SimpleProduct name={name} sku={finalSku} price={price} size="10x395g" quantities={quantities} setQty={setQty} />;
+  const cells = [
+    { key: sku, label: "Non-VAT", price, desc: `${name} 10x395g (Non-VAT)` },
+    { key: sku + "V", label: "VAT", price, desc: `${name} 10x395g (VAT)` },
+  ];
+  return (
+    <div style={s.productRow(null)}>
+      <div style={s.productName}>{name}</div>
+      <div style={s.sizeGroup}>
+        {cells.map(c => (
+          <div key={c.key} style={s.sizeBox}>
+            <span style={s.sizeLabel(false)}>{c.label}</span>
+            <Stepper sku={c.key} qtyValue={quantities[c.key] || 0} price={c.price} desc={c.desc} weight={3.95} onSet={setQty} priceLabel={`£${c.price.toFixed(2)}`} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function TreatGroup({ group, quantities, setQty }) {
   const [name, items] = group;
   return (
-    <div style={s.treatRow}>
+    <div style={s.stackedRow}>
       <div style={s.treatName}>{name}</div>
-      <div style={s.treatSizes}>
-        {items.map(([sku, size]) => (
+      <div style={s.stackedSizes}>
+        {items.map(([sku, size, price]) => (
           <div key={sku} style={s.sizeBox}>
             <span style={s.sizeLabel(false)}>{size || "pack"}</span>
-            <QtyControl value={quantities[sku] || 0} onChange={v => setQty(sku, v, 0, name + " " + (size || "pack"), weightOf(size))} />
+            <Stepper compact sku={sku} qtyValue={quantities[sku] || 0} price={price || 0} desc={name + " " + (size || "pack")} weight={weightOf(size)} onSet={setQty} priceLabel={price > 0 ? `£${price.toFixed(2)}` : "TBC"} />
           </div>
         ))}
       </div>
@@ -747,16 +765,28 @@ export default function App() {
     setOpenCats(prev => ({ ...prev, [cat]: !prev[cat] }));
   }, []);
 
-  const orderList = useMemo(() => Object.values(orderItems).filter(i => i.qty > 0), [orderItems]);
+  // Total quantity per base SKU (individual bags + pallet bags combined) for price breaks
+  const baseTotals = useMemo(() => {
+    const t = {};
+    Object.values(orderItems).forEach(i => {
+      if (i.qty > 0) {
+        const b = baseSkuOf(i.sku);
+        t[b] = (t[b] || 0) + i.qty;
+      }
+    });
+    return t;
+  }, [orderItems]);
+
+  const orderList = useMemo(() => Object.values(orderItems).filter(i => i.qty > 0).map(i => {
+    const b = baseSkuOf(i.sku);
+    const tp = tierPrice(b, baseTotals[b] || i.qty);
+    return tp != null ? { ...i, price: tp } : i;
+  }), [orderItems, baseTotals]);
   
   const totalNet = useMemo(() => orderList.reduce((sum, i) => sum + (i.price * i.qty), 0), [orderList]);
   const totalWeight = useMemo(() => orderList.reduce((sum, i) => sum + (i.weight * i.qty), 0), [orderList]);
   const totalItems = useMemo(() => orderList.reduce((sum, i) => sum + i.qty, 0), [orderList]);
   const carriage = useMemo(() => carriageCalc(totalWeight, totalNet), [totalWeight, totalNet]);
-
-  const countForCat = useCallback((skuPrefixes) => {
-    return orderList.filter(i => skuPrefixes.some(p => i.sku.startsWith(p) || i.sku.toUpperCase().startsWith(p))).reduce((s, i) => s + i.qty, 0);
-  }, [orderList]);
 
   // Count items per category
   const catCounts = useMemo(() => {
@@ -769,13 +799,12 @@ export default function App() {
     const wdSKUs = ["SR0351","SR0399","SR0397","SR0353","SR0398","SR0352","SR0118","SR0109","SR0450","SR0451","C0004","P0015","P0014","P0020","P0021"];
     c.wd = orderList.filter(i => wdSKUs.some(p => i.sku.startsWith(p) || i.sku === p)).reduce((s,i) => s + i.qty, 0);
     c.gl = orderList.filter(i => i.sku.startsWith("GD")).reduce((s,i) => s + i.qty, 0);
-    c.wt = orderList.filter(i => i.desc && i.desc.includes("x395")).reduce((s,i) => s + i.qty, 0);
+    c.wt = orderList.filter(i => WT.some(r => i.sku === r[2] || i.sku === r[2] + "V")).reduce((s,i) => s + i.qty, 0);
     c.spwt = orderList.filter(i => ["SR0489","SR0490","SR0491","SR0492","SR0493"].some(p => i.sku.startsWith(p))).reduce((s,i) => s + i.qty, 0);
-    c.tr = orderList.filter(i => i.sku.startsWith("TRT") || ["SR0466","SR0467","SR0468","SR0469","SR0470","SR0471","SR0473","SR0474","SR0277","sr0543"].some(p => i.sku === p)).reduce((s,i) => s + i.qty, 0);
-    c.tb = orderList.filter(i => i.sku.startsWith("TRT") || i.sku.startsWith("SR04") || i.sku.startsWith("SR05")).reduce((s,i) => s + i.qty, 0);
+    c.treats = orderList.filter(i => i.sku.startsWith("TRT")).reduce((s,i) => s + i.qty, 0);
     c.mt = orderList.filter(i => i.sku.includes("X7")).reduce((s,i) => s + i.qty, 0);
     c.pero = orderList.filter(i => /^P00(38|39|40|37|18|19|71|72|73|74|75|76|77|78|79|80|81|82)/.test(i.sku) || i.sku.startsWith("TRU")).reduce((s,i) => s + i.qty, 0);
-    c.cat = orderList.filter(i => i.sku === "SR0164" || i.sku === "SR0216").reduce((s,i) => s + i.qty, 0);
+    c.cat = orderList.filter(i => ["SR0215","SR0164","C0005"].some(p => i.sku.startsWith(p))).reduce((s,i) => s + i.qty, 0);
     return c;
   }, [orderList]);
 
@@ -848,9 +877,13 @@ export default function App() {
   }, [buildOrderText]);
 
   const clearOrder = useCallback(() => {
-    const confirmed = window.confirm("Are you sure? This will clear the entire order.");
+    const confirmed = window.confirm("Clear the whole form? This resets the order, customer name, notes, packaging and VAT status.");
     if (confirmed) {
       setOrderItems({});
+      setCustomerName("");
+      setNotes("");
+      setPackaging("coloured");
+      setVat("wd");
     }
   }, []);
 
@@ -947,10 +980,11 @@ export default function App() {
 
         {/* WET TRAYS */}
         <CategorySection title="Wet Trays" count={catCounts.wt} open={openCats.wt} onToggle={() => toggleCat("wt")}>
+          <div style={{ padding: "6px 16px 2px", fontSize: 11, color: colors.textMid }}>Non-VAT & VAT variants shown side by side · 10x395g</div>
           {wtGroups.map(g => (
             <ProteinGroup key={g.key} label={g.label} protein={g.key}>
               {g.items.map((row, i) => (
-                <WTProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} />
+                <WTProduct key={i} row={row} quantities={quantities} setQty={setQty} />
               ))}
             </ProteinGroup>
           ))}
@@ -964,16 +998,9 @@ export default function App() {
           ))}
         </CategorySection>
 
-        {/* TREATS - RETAIL */}
-        <CategorySection title="Treats — Retail Packs" count={0} open={openCats.tr} onToggle={() => toggleCat("tr")}>
-          {TREATS_RETAIL.map((group, i) => (
-            <TreatGroup key={i} group={group} quantities={quantities} setQty={setQty} />
-          ))}
-        </CategorySection>
-
-        {/* TREATS - BULK */}
-        <CategorySection title="Treats — Bulk Packs" count={0} open={openCats.tb} onToggle={() => toggleCat("tb")}>
-          {TREATS_BULK.map((group, i) => (
+        {/* TREATS (combined — retail, bulk bag, bulk box side by side) */}
+        <CategorySection title="Treats" count={catCounts.treats} open={openCats.treats} onToggle={() => toggleCat("treats")}>
+          {TREATS.map((group, i) => (
             <TreatGroup key={i} group={group} quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
@@ -989,21 +1016,39 @@ export default function App() {
         {/* MEAL TOPPERS */}
         <CategorySection title="Meal Toppers" count={catCounts.mt} open={openCats.mt} onToggle={() => toggleCat("mt")}>
           {MT.map((row, i) => (
-            <SimpleProduct key={i} name={row[0]} sku={row[1]} price={0} size={row[2]} quantities={quantities} setQty={setQty} />
+            <SimpleProduct key={i} name={row[0]} sku={row[1]} price={row[3]} size={row[2]} quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
 
         {/* CAT */}
         <CategorySection title="Cat" count={catCounts.cat} open={openCats.cat} onToggle={() => toggleCat("cat")}>
-          {CAT_PRODS.map((row, i) => (
-            <SimpleProduct key={i} name={row[0]} sku={row[1]} price={0} size={row[2]} quantities={quantities} setQty={setQty} />
+          {CAT_DRY.map((row, i) => (
+            <ProductRow
+              key={i}
+              name={row[0]}
+              cells={[
+                { key: row[1], label: row[2], price: row[3], weight: weightOf(row[2]), step: 1, desc: `${row[0]} ${row[2]}` },
+                { key: row[4], label: row[5], price: row[6], weight: weightOf(row[5]), step: 1, desc: `${row[0]} ${row[5]}` },
+              ]}
+              quantities={quantities}
+              setQty={setQty}
+            />
           ))}
+          <ProductRow
+            name={CAT_CAN.name}
+            cells={[
+              { key: CAT_CAN.sku, label: "case", price: CAT_CAN.price, weight: CAT_CAN.caseWeight, step: 1, desc: `${CAT_CAN.name} case` },
+              { key: CAT_CAN.sku + "-PLT", label: "Pallet", price: CAT_CAN.price, weight: CAT_CAN.caseWeight, step: CAT_CAN.pallet, palletQty: CAT_CAN.pallet, isPallet: true, desc: `${CAT_CAN.name} (Pallet, cases)` },
+            ]}
+            quantities={quantities}
+            setQty={setQty}
+          />
         </CategorySection>
 
         {/* COLLAPSE/EXPAND ALL */}
         <div style={{ display: "flex", gap: 8, padding: "16px 12px" }}>
           <button onClick={() => {
-            const allCats = ['gf', 'wgf', 'wd', 'gl', 'cp', 'wt', 'spwt', 'tr', 'tb', 'pero', 'mt', 'cat'];
+            const allCats = ['gf', 'wgf', 'wd', 'gl', 'cp', 'wt', 'spwt', 'treats', 'pero', 'mt', 'cat'];
             setOpenCats(allCats.reduce((acc, cat) => ({ ...acc, [cat]: true }), {}));
           }} style={{ flex: 1, ...s.reviewBtn }}>
             Expand All
@@ -1020,14 +1065,17 @@ export default function App() {
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: colors.primary }}>
             £{totalNet.toFixed(2)}
+            <span style={{ fontSize: 13, fontWeight: 700, color: colors.text }}> · {totalWeight.toFixed(1)}kg</span>
           </div>
           <div style={{ fontSize: 11, color: freeCarriageGap > 0 ? colors.textMid : colors.primary }}>
             {freeCarriageGap > 0 ? `£${freeCarriageGap.toFixed(0)} to free carriage` : "✓ Free carriage"}
             {totalItems > 0 && ` · ${totalItems} items`}
           </div>
-          {carriage.sku && carriage.cost > 0 && (
+          {carriage.sku && (
             <div style={{ fontSize: 10, color: colors.textLight }}>
-              Est. carriage: {carriage.desc} — £{(carriage.cost * (carriage.qty || 1)).toFixed(2)}+VAT
+              {carriage.sku === "FREE"
+                ? carriage.desc
+                : `Carriage: ${carriage.desc} — £${(carriage.cost * (carriage.qty || 1)).toFixed(2)}+VAT`}
             </div>
           )}
         </div>
