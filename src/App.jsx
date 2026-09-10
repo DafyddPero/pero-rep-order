@@ -65,16 +65,16 @@ const CP = [
 //  Regular : {name, wd, vat, price, size, pallet}   pallet = bags/cases per pallet
 //  Pero    : {name, pero:true, wd(small sku), vat(big sku), priceSmall, priceBig, sizeSmall, sizeBig, pallet}
 const WD = [
+{name:"Meaty Mix", wd:"SR0118", vat:"", price:19.40, size:"15kg", pallet:65},
+{name:"Muesli Mix", wd:"SR0109", vat:"", price:17.91, size:"15kg", pallet:65},
+{name:"Celt 22 (Celt Label)", wd:"SR0450", vat:"", price:13.95, size:"15kg", pallet:60},
+{name:"Celt 22 (Own Label)", wd:"SR0451", vat:"", price:12.74, size:"15kg", pallet:60},
 {name:"Rich in Chicken", wd:"SR0351", vat:"", price:18.01, size:"15kg", pallet:65},
 {name:"Rich in Chicken (Hardworking)", wd:"SR0399", vat:"SR0399V", price:19.04, size:"15kg", pallet:65},
 {name:"Economy Chicken & Rice", wd:"SR0397", vat:"SR0397V", price:18.03, size:"15kg", pallet:65},
 {name:"Economy Lamb & Rice", wd:"SR0353", vat:"SR0353V", price:19.35, size:"15kg", pallet:65},
 {name:"Resting/Senior with Chicken", wd:"SR0398", vat:"SR0398V", price:19.56, size:"15kg", pallet:65},
 {name:"Puppy with Chicken", wd:"SR0352", vat:"SR0352V", price:18.01, size:"15kg", pallet:65},
-{name:"Meaty Mix", wd:"SR0118", vat:"", price:19.40, size:"15kg", pallet:65},
-{name:"Muesli Mix", wd:"SR0109", vat:"", price:17.91, size:"15kg", pallet:65},
-{name:"Celt 22 (Celt Label)", wd:"SR0450", vat:"", price:13.95, size:"15kg", pallet:60},
-{name:"Celt 22 (Own Label)", wd:"SR0451", vat:"", price:12.74, size:"15kg", pallet:60},
 {name:"Celt Canned Wet (Dogs)", wd:"C0004", vat:"", price:6.49, size:"case", pallet:192, caseWeight:3.95},
 {name:"Pero Premiwm", pero:true, wd:"", vat:"P0014", priceSmall:0, priceBig:20.25, sizeSmall:"", sizeBig:"15kg", pallet:65},
 {name:"Pero Active", pero:true, wd:"", vat:"P0020", priceSmall:0, priceBig:20.03, sizeSmall:"", sizeBig:"15kg", pallet:65},
@@ -285,6 +285,32 @@ function tierPrice(baseSku, totalQty) {
   return price;
 }
 
+const money = (n) => `£${n.toFixed(2)}`;
+
+// Live unit-price label for a cell. For price-break SKUs the shown price reflects the
+// current quantity tier (bags loose + pallets combined), so it drops as more is added.
+// baseTotals is the live per-base-SKU quantity map (may be undefined for non-break rows).
+function unitLabel(sku, basePrice, { baseTotals, atLeast } = {}) {
+  if (basePrice <= 0) return "TBC";
+  const b = baseSkuOf(sku);
+  if (PRICE_BREAKS[b]) {
+    const live = (baseTotals && baseTotals[b]) || 0;
+    const qty = Math.max(live, atLeast || 1);
+    return money(tierPrice(b, qty));
+  }
+  return money(basePrice);
+}
+
+// Per-kg (or per-piece) value line — shows the saving on bigger packs.
+function perUnitLabel(size, price) {
+  if (price <= 0 || !size) return null;
+  const w = weightOf(size);
+  if (w > 0) return `${money(price / w)}/kg`;
+  const m = size.match(/(\d+)\s*pcs/i);
+  if (m) return `${money(price / parseFloat(m[1]))}/pc`;
+  return null;
+}
+
 function weightOf(size) {
   if (!size) return 0;
   let m = size.match(/([0-9.]+)\s*kg/);
@@ -311,36 +337,29 @@ function carriageCalc(weight, value) {
   return { sku: "PS1", desc: `Full pallet x${pallets}`, cost: 63 * pallets, qty: pallets };
 }
 
-// ── DYSLEXIA-FRIENDLY FONT IMPORT ──
-if (typeof document !== 'undefined' && !document.querySelector('style[data-dyslexic]')) {
-  const fontStyle = document.createElement('style');
-  fontStyle.textContent = `@import url('https://fonts.googleapis.com/css2?family=OpenDyslexic:wght@400;700&display=swap');`;
-  fontStyle.setAttribute('data-dyslexic', 'true');
-  document.head.appendChild(fontStyle);
-}
-
 // ── STYLES ──
 const colors = {
-  bg: "#f7f7f5",
-  card: "#ffffff",
-  primary: "#1a6847",
-  primaryLight: "#e8f5ee",
-  accent: "#d4a843",
-  text: "#1a1a1a",
-  textMid: "#555",
-  textLight: "#888",
-  border: "#e2e2e0",
-  danger: "#c0392b",
-  dangerLight: "#fdf0ef",
-  // Protein highlights — light tint (row/line background)
-  chicken: "#fef9f0",
-  beef: "#fdf3f1",
-  salmon: "#eef6fc",
-  duck: "#f4f1fb",
-  turkey: "#fdf5ec",
-  lamb: "#eef5ef",
-  pork: "#fdf0f6",
-  mixed: "#eef1f2",
+  bg: "#F2F2F7",          // iOS grouped background (soft, not harsh white)
+  card: "#FFFFFF",
+  primary: "#1A6847",     // Pero green (app tint)
+  primaryLight: "#E7F2EC",
+  accent: "#B8860B",      // muted gold — pallet accents
+  text: "#1C1C1E",        // iOS label
+  textMid: "#8E8E93",     // iOS secondary label
+  textLight: "#C7C7CC",   // iOS tertiary label
+  border: "#E5E5EA",      // iOS hairline separator
+  danger: "#FF3B30",      // iOS red
+  dangerLight: "#FFECEB",
+  segBg: "#E9E9EB",       // iOS segmented-control track
+  // Protein highlights — soft tints
+  chicken: "#FEF7EC",
+  beef: "#FCF1EF",
+  salmon: "#EAF3FB",
+  duck: "#F2EFFA",
+  turkey: "#FCF3E8",
+  lamb: "#EBF4EE",
+  pork: "#FBEEF4",
+  mixed: "#EEF0F2",
 };
 
 // Darker accent per protein — used for the category line's left bar + text
@@ -355,7 +374,8 @@ const proteinAccent = {
   mixed: "#5a6b73",
 };
 
-const fontFamily = "'OpenDyslexic', 'Verdana', -apple-system, BlinkMacSystemFont, sans-serif";
+// Apple system font (SF Pro on iOS).
+const fontFamily = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif";
 
 // Helper to get subtle protein color
 const getProteinColor = (protein) => {
@@ -378,57 +398,59 @@ const getProteinAccent = (protein) => {
 };
 
 const s = {
-  page: { fontFamily, background: colors.bg, color: colors.text, minHeight: "100vh", paddingBottom: 90, fontSize: 16, letterSpacing: 0.3, lineHeight: 1.6 },
-  header: { background: colors.primary, color: "#fff", padding: "24px 16px 20px", position: "sticky", top: 0, zIndex: 100 },
-  headerTitle: { fontSize: 24, fontWeight: 700, letterSpacing: 0.2, margin: 0, fontFamily },
-  headerSub: { fontSize: 14, opacity: 0.8, marginTop: 4, fontFamily },
-  section: { padding: "0 12px", marginTop: 16 },
-  input: { width: "100%", padding: "12px 12px", border: `2px solid ${colors.border}`, borderRadius: 8, fontSize: 16, boxSizing: "border-box", background: "#fff", outline: "none", fontFamily, letterSpacing: 0.2, lineHeight: 1.6 },
-  textarea: { width: "100%", padding: "12px 12px", border: `2px solid ${colors.border}`, borderRadius: 8, fontSize: 16, boxSizing: "border-box", background: "#fff", resize: "vertical", minHeight: 60, outline: "none", fontFamily, letterSpacing: 0.2, lineHeight: 1.6 },
-  label: { fontSize: 14, fontWeight: 700, color: colors.text, display: "block", marginBottom: 6, fontFamily, letterSpacing: 0.1 },
-  toggleRow: { display: "flex", gap: 8, marginTop: 12 },
-  toggleBtn: (active) => ({ flex: 1, padding: "12px 8px", border: `3px solid ${active ? colors.primary : colors.border}`, borderRadius: 12, background: active ? colors.primaryLight : "#fff", color: active ? colors.primary : colors.textMid, fontWeight: 700, fontSize: 15, cursor: "pointer", textAlign: "center", transition: "all 0.15s", fontFamily, letterSpacing: 0.1 }),
-  catHeader: (open) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: "#fff", borderRadius: open ? "10px 10px 0 0" : 10, border: `2px solid ${colors.border}`, borderBottom: open ? `2px solid ${colors.border}` : `2px solid ${colors.border}`, cursor: "pointer", userSelect: "none", marginTop: 6 }),
-  catTitle: { fontWeight: 700, fontSize: 16, fontFamily, letterSpacing: 0.1 },
-  catBadge: (n) => ({ fontSize: 11, fontWeight: 700, background: n > 0 ? colors.primary : colors.border, color: n > 0 ? "#fff" : colors.textMid, borderRadius: 20, padding: "2px 8px", minWidth: 20, textAlign: "center" }),
-  catBody: { background: "#fff", borderRadius: "0 0 10px 10px", border: `1px solid ${colors.border}`, borderTop: "none", padding: "4px 0" },
-  groupLine: (accent, bg) => ({ fontSize: 12, fontWeight: 700, color: accent, padding: "10px 16px 10px 12px", letterSpacing: 0.4, fontFamily, textTransform: "none", background: bg, borderLeft: `4px solid ${accent}`, borderBottom: `1px solid ${colors.border}` }),
-  productRow: (bg) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", gap: 8, borderBottom: `1px solid ${colors.bg}`, background: bg || "#fff" }),
-  productName: { fontSize: 15, fontWeight: 600, flex: 1, lineHeight: 1.4, fontFamily, letterSpacing: 0.1 },
-  sizeGroup: { display: "flex", gap: 8, alignItems: "center", flexShrink: 0 },
+  page: { fontFamily, background: colors.bg, color: colors.text, minHeight: "100vh", paddingBottom: 96, fontSize: 16, lineHeight: 1.4, WebkitFontSmoothing: "antialiased" },
+  header: { background: colors.primary, color: "#fff", padding: "calc(20px + env(safe-area-inset-top)) 16px 16px", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 rgba(0,0,0,0.04)" },
+  headerTitle: { fontSize: 26, fontWeight: 700, letterSpacing: -0.5, margin: 0, fontFamily },
+  headerSub: { fontSize: 13, opacity: 0.85, marginTop: 2, fontFamily },
+  section: { padding: "0 16px", marginTop: 18 },
+  card: { background: colors.card, borderRadius: 14, padding: 16, boxShadow: "0 1px 2px rgba(0,0,0,0.04)" },
+  input: { width: "100%", padding: "11px 12px", border: "none", borderRadius: 10, fontSize: 16, boxSizing: "border-box", background: colors.bg, outline: "none", fontFamily, lineHeight: 1.4 },
+  textarea: { width: "100%", padding: "11px 12px", border: "none", borderRadius: 10, fontSize: 16, boxSizing: "border-box", background: colors.bg, resize: "vertical", minHeight: 54, outline: "none", fontFamily, lineHeight: 1.4 },
+  label: { fontSize: 13, fontWeight: 600, color: colors.textMid, display: "block", marginBottom: 6, fontFamily, letterSpacing: 0.1 },
+  // iOS segmented control
+  segWrap: { display: "flex", gap: 2, background: colors.segBg, borderRadius: 9, padding: 2, marginTop: 10 },
+  segBtn: (active) => ({ flex: 1, padding: "8px 8px", border: "none", borderRadius: 7, background: active ? "#fff" : "transparent", color: active ? colors.primary : colors.text, fontWeight: 600, fontSize: 14, cursor: "pointer", textAlign: "center", transition: "background 0.15s", fontFamily, boxShadow: active ? "0 1px 3px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.04)" : "none" }),
+  catHeader: (open) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: "#fff", borderRadius: open ? "14px 14px 0 0" : 14, cursor: "pointer", userSelect: "none", marginTop: 8, boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }),
+  catTitle: { fontWeight: 600, fontSize: 17, fontFamily, letterSpacing: -0.2 },
+  catBadge: (n) => ({ fontSize: 12, fontWeight: 600, background: n > 0 ? colors.primary : colors.segBg, color: n > 0 ? "#fff" : colors.textMid, borderRadius: 20, padding: "2px 9px", minWidth: 20, textAlign: "center", fontFamily }),
+  catBody: { background: "#fff", borderRadius: "0 0 14px 14px", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", padding: "2px 0 0", overflow: "hidden" },
+  groupLine: (accent, bg) => ({ fontSize: 12, fontWeight: 700, color: accent, padding: "9px 16px 9px 12px", letterSpacing: 0.3, fontFamily, textTransform: "none", background: bg, borderLeft: `3px solid ${accent}` }),
+  productRow: (bg) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", gap: 8, borderBottom: `0.5px solid ${colors.border}`, background: bg || "#fff" }),
+  productName: { fontSize: 15, fontWeight: 500, flex: 1, lineHeight: 1.3, fontFamily, letterSpacing: -0.1 },
+  sizeGroup: { display: "flex", gap: 8, alignItems: "flex-start", flexShrink: 0 },
   sizeBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
-  sizeLabel: (isPallet) => ({ fontSize: 11, color: isPallet ? colors.accent : colors.textMid, fontWeight: 700, fontFamily, letterSpacing: 0.1 }),
-  qtyControl: { display: "flex", alignItems: "center", gap: 0, borderRadius: 8, overflow: "hidden", border: `1px solid ${colors.border}` },
-  qtyBtn: { width: 38, height: 38, border: "none", background: colors.bg, color: colors.text, fontSize: 20, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily },
-  qtyBtnSm: { width: 32, height: 36, border: "none", background: colors.bg, color: colors.text, fontSize: 18, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily },
-  qtyVal: (v) => ({ width: 36, textAlign: "center", fontSize: 16, fontWeight: 700, color: v > 0 ? colors.primary : colors.textLight, background: v > 0 ? colors.primaryLight : "#fff", height: 38, lineHeight: "38px", borderLeft: `1px solid ${colors.border}`, borderRight: `1px solid ${colors.border}`, fontFamily }),
-  qtyValSm: (v) => ({ width: 30, textAlign: "center", fontSize: 15, fontWeight: 700, color: v > 0 ? colors.primary : colors.textLight, background: v > 0 ? colors.primaryLight : "#fff", height: 36, lineHeight: "36px", borderLeft: `1px solid ${colors.border}`, borderRight: `1px solid ${colors.border}`, fontFamily }),
-  stepperWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2 },
-  stepperPrice: { fontSize: 10, color: colors.textMid, fontWeight: 700, fontFamily },
+  sizeLabel: (isPallet) => ({ fontSize: 11, color: isPallet ? colors.accent : colors.textMid, fontWeight: 600, fontFamily }),
+  qtyControl: { display: "flex", alignItems: "center", gap: 0, borderRadius: 10, overflow: "hidden", border: `1px solid ${colors.border}`, background: "#fff" },
+  qtyBtn: { width: 40, height: 38, border: "none", background: "transparent", color: colors.primary, fontSize: 22, fontWeight: 400, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily, WebkitTapHighlightColor: "transparent" },
+  qtyBtnSm: { width: 34, height: 36, border: "none", background: "transparent", color: colors.primary, fontSize: 20, fontWeight: 400, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontFamily, WebkitTapHighlightColor: "transparent" },
+  qtyVal: (v) => ({ minWidth: 34, textAlign: "center", fontSize: 16, fontWeight: 600, color: v > 0 ? colors.primary : colors.textLight, background: v > 0 ? colors.primaryLight : "#fff", height: 38, lineHeight: "38px", borderLeft: `1px solid ${colors.border}`, borderRight: `1px solid ${colors.border}`, fontFamily, padding: "0 4px" }),
+  qtyValSm: (v) => ({ minWidth: 28, textAlign: "center", fontSize: 15, fontWeight: 600, color: v > 0 ? colors.primary : colors.textLight, background: v > 0 ? colors.primaryLight : "#fff", height: 36, lineHeight: "36px", borderLeft: `1px solid ${colors.border}`, borderRight: `1px solid ${colors.border}`, fontFamily, padding: "0 3px" }),
+  stepperWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 3 },
+  stepperPrice: { fontSize: 11, color: colors.text, fontWeight: 600, fontFamily },
+  stepperSub: { fontSize: 9.5, color: colors.textMid, fontWeight: 500, fontFamily, marginTop: -2 },
   // Stacked layout: product name on its own line, size counters wrap below within the frame
-  stackedRow: { padding: "12px 14px", borderBottom: `1px solid ${colors.bg}` },
-  stackedSizes: { display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8, justifyContent: "flex-start" },
-  bottomBar: { position: "fixed", bottom: 0, left: 0, right: 0, background: "#fff", borderTop: `3px solid ${colors.primary}`, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 200, boxShadow: "0 -4px 20px rgba(0,0,0,0.08)" },
-  reviewBtn: { background: colors.primary, color: "#fff", border: "none", borderRadius: 12, padding: "14px 24px", fontSize: 16, fontWeight: 700, cursor: "pointer", fontFamily, letterSpacing: 0.1 },
-  modal: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" },
-  modalContent: { background: "#fff", borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 500, maxHeight: "90vh", overflow: "auto", padding: "24px 16px 30px", fontFamily },
-  modalTitle: { fontSize: 20, fontWeight: 700, marginBottom: 16, fontFamily, letterSpacing: 0.1 },
+  stackedRow: { padding: "11px 16px", borderBottom: `0.5px solid ${colors.border}` },
+  stackedSizes: { display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8, justifyContent: "flex-start" },
+  bottomBar: { position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "saturate(180%) blur(20px)", WebkitBackdropFilter: "saturate(180%) blur(20px)", borderTop: `0.5px solid ${colors.border}`, padding: "10px 16px calc(10px + env(safe-area-inset-bottom))", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 200 },
+  reviewBtn: { background: colors.primary, color: "#fff", border: "none", borderRadius: 12, padding: "13px 20px", fontSize: 16, fontWeight: 600, cursor: "pointer", fontFamily, letterSpacing: -0.2, WebkitTapHighlightColor: "transparent" },
+  modal: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" },
+  modalContent: { background: "#fff", borderRadius: "16px 16px 0 0", width: "100%", maxWidth: 500, maxHeight: "92vh", overflow: "auto", padding: "10px 16px calc(30px + env(safe-area-inset-bottom))", fontFamily },
+  grabber: { width: 36, height: 5, borderRadius: 3, background: "#D1D1D6", margin: "0 auto 10px" },
+  modalTitle: { fontSize: 22, fontWeight: 700, marginBottom: 14, fontFamily, letterSpacing: -0.4 },
   orderTable: { width: "100%", fontSize: 12, borderCollapse: "collapse" },
-  th: { textAlign: "left", padding: "6px 4px", borderBottom: `2px solid ${colors.text}`, fontWeight: 700, fontSize: 11 },
-  td: { padding: "5px 4px", borderBottom: `1px solid ${colors.border}`, fontSize: 12, verticalAlign: "top" },
-  copyBtn: { width: "100%", padding: "14px", background: colors.primary, color: "#fff", border: "none", borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: "pointer", marginTop: 16 },
-  copied: { width: "100%", padding: "14px", background: colors.accent, color: "#fff", border: "none", borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: "pointer", marginTop: 16 },
-  treatRow: { padding: "8px 16px", borderBottom: `1px solid ${colors.bg}` },
-  treatName: { fontSize: 14, fontWeight: 500, marginBottom: 6 },
-  treatSizes: { display: "flex", gap: 8, flexWrap: "wrap" },
-  catFooterCollapse: { textAlign: "center", padding: "12px", marginTop: 4, color: colors.textMid, fontSize: 13, fontWeight: 700, cursor: "pointer", background: colors.bg, borderTop: `1px solid ${colors.border}`, fontFamily, letterSpacing: 0.2 },
+  th: { textAlign: "left", padding: "6px 4px", borderBottom: `1.5px solid ${colors.text}`, fontWeight: 600, fontSize: 11 },
+  td: { padding: "5px 4px", borderBottom: `0.5px solid ${colors.border}`, fontSize: 12, verticalAlign: "top" },
+  copyBtn: { width: "100%", padding: "14px", background: colors.primary, color: "#fff", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: "pointer", marginTop: 16, fontFamily },
+  copied: { width: "100%", padding: "14px", background: colors.accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: "pointer", marginTop: 16, fontFamily },
+  treatName: { fontSize: 15, fontWeight: 500, marginBottom: 2, letterSpacing: -0.1 },
+  catFooterCollapse: { textAlign: "center", padding: "12px", color: colors.primary, fontSize: 14, fontWeight: 500, cursor: "pointer", background: "#fff", borderTop: `0.5px solid ${colors.border}`, borderRadius: "0 0 14px 14px", fontFamily },
 };
 
 
 // ── COMPONENTS ──
 // Memoised stepper: re-renders only when its own quantity changes, not on every
 // keystroke elsewhere. onSet must be stable (the app's setQty is useCallback []).
-const Stepper = memo(function Stepper({ sku, qtyValue, price, desc, weight, step = 1, onSet, priceLabel, compact }) {
+const Stepper = memo(function Stepper({ sku, qtyValue, price, desc, weight, step = 1, onSet, priceLabel, subLabel, compact }) {
   const btn = compact ? s.qtyBtnSm : s.qtyBtn;
   const val = compact ? s.qtyValSm(qtyValue) : s.qtyVal(qtyValue);
   return (
@@ -439,6 +461,7 @@ const Stepper = memo(function Stepper({ sku, qtyValue, price, desc, weight, step
         <button style={btn} onClick={() => onSet(sku, qtyValue + step, price, desc, weight)}>+</button>
       </div>
       {priceLabel ? <span style={s.stepperPrice}>{priceLabel}</span> : null}
+      {subLabel ? <span style={s.stepperSub}>{subLabel}</span> : null}
     </div>
   );
 });
@@ -555,7 +578,7 @@ function SimpleProduct({ name, sku, price, size, quantities, setQty }) {
 // cell: { key, label, price, weight, step, desc, isPallet, palletQty }
 // For a pallet, step = bags/cases per pallet, and the displayed number IS the bag count
 // (65, 130, ...), so total = qty × unit price multiplies correctly.
-function ProductRow({ name, protein = null, cells, quantities, setQty }) {
+function ProductRow({ name, protein = null, cells, quantities, setQty, baseTotals }) {
   const visible = cells.filter(Boolean);
   if (visible.length === 0) return null;
   return (
@@ -575,7 +598,8 @@ function ProductRow({ name, protein = null, cells, quantities, setQty }) {
               desc={c.desc}
               weight={c.weight}
               onSet={setQty}
-              priceLabel={c.price > 0 ? `£${c.price.toFixed(2)}` : "TBC"}
+              priceLabel={unitLabel(c.key, c.price, { baseTotals, atLeast: c.isPallet ? c.palletQty : 1 })}
+              subLabel={c.subLabel}
             />
           </div>
         ))}
@@ -584,16 +608,16 @@ function ProductRow({ name, protein = null, cells, quantities, setQty }) {
   );
 }
 
-function GLProduct({ name, sku, price, quantities, setQty }) {
+function GLProduct({ name, sku, price, quantities, setQty, baseTotals }) {
   if (!sku) return null;
   const cells = [
     { key: sku, label: "15kg", price, weight: 15, step: 1, desc: `${name} 15kg` },
     { key: sku + "-PLT", label: "Pallet", price, weight: 15, step: 65, palletQty: 65, isPallet: true, desc: `${name} 15kg (Pallet)` },
   ];
-  return <ProductRow name={name} cells={cells} quantities={quantities} setQty={setQty} />;
+  return <ProductRow name={name} cells={cells} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />;
 }
 
-function WDProduct({ row, vat, quantities, setQty }) {
+function WDProduct({ row, vat, quantities, setQty, baseTotals }) {
   // Pero dual-size items
   if (row.pero) {
     const bigSku = row.vat || row.wd;
@@ -609,7 +633,7 @@ function WDProduct({ row, vat, quantities, setQty }) {
         ? { key: bigSku + "-PLT", label: "Pallet", price: row.priceBig || row.priceSmall, weight: bigWeight, step: row.pallet, palletQty: row.pallet, isPallet: true, desc: `${row.name} ${row.sizeBig || row.sizeSmall} (Pallet)` }
         : null,
     ];
-    return <ProductRow name={row.name} cells={cells} quantities={quantities} setQty={setQty} />;
+    return <ProductRow name={row.name} cells={cells} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />;
   }
 
   // Regular WD item (15kg bag or case)
@@ -623,7 +647,7 @@ function WDProduct({ row, vat, quantities, setQty }) {
       ? { key: sku + "-PLT", label: "Pallet", price: row.price, weight: unitWeight, step: row.pallet, palletQty: row.pallet, isPallet: true, desc: `${row.name} ${row.size} (Pallet${isCase ? ", cases" : ""})` }
       : null,
   ];
-  return <ProductRow name={row.name} cells={cells} quantities={quantities} setQty={setQty} />;
+  return <ProductRow name={row.name} cells={cells} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />;
 }
 
 function PeroProduct({ row, vat, quantities, setQty }) {
@@ -696,7 +720,7 @@ function TreatGroup({ group, quantities, setQty }) {
         {items.map(([sku, size, price]) => (
           <div key={sku} style={s.sizeBox}>
             <span style={s.sizeLabel(false)}>{size || "pack"}</span>
-            <Stepper compact sku={sku} qtyValue={quantities[sku] || 0} price={price || 0} desc={name + " " + (size || "pack")} weight={weightOf(size)} onSet={setQty} priceLabel={price > 0 ? `£${price.toFixed(2)}` : "TBC"} />
+            <Stepper compact sku={sku} qtyValue={quantities[sku] || 0} price={price || 0} desc={name + " " + (size || "pack")} weight={weightOf(size)} onSet={setQty} priceLabel={price > 0 ? money(price) : "TBC"} subLabel={perUnitLabel(size, price)} />
           </div>
         ))}
       </div>
@@ -899,31 +923,23 @@ export default function App() {
 
       {/* ORDER SETTINGS */}
       <div style={s.section}>
-        <div style={{ background: "#fff", borderRadius: 12, padding: 16, border: `1px solid ${colors.border}` }}>
+        <div style={s.card}>
           <label style={s.label}>Customer Name</label>
           <input style={s.input} placeholder="Enter customer name..." value={customerName} onChange={e => setCustomerName(e.target.value)} />
           
-          <label style={{ ...s.label, marginTop: 12 }}>Notes</label>
+          <label style={{ ...s.label, marginTop: 14 }}>Notes</label>
           <textarea style={s.textarea} placeholder="Brief notes for this order..." value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
           
-          <label style={{ ...s.label, marginTop: 12 }}>Packaging</label>
-          <div style={s.toggleRow}>
-            <button style={s.toggleBtn(packaging === "coloured")} onClick={() => setPackaging("coloured")}>
-              Coloured Bags
-            </button>
-            <button style={s.toggleBtn(packaging === "paper")} onClick={() => setPackaging("paper")}>
-              Paper Bags
-            </button>
+          <label style={{ ...s.label, marginTop: 14 }}>Packaging</label>
+          <div style={s.segWrap}>
+            <button style={s.segBtn(packaging === "coloured")} onClick={() => setPackaging("coloured")}>Coloured Bags</button>
+            <button style={s.segBtn(packaging === "paper")} onClick={() => setPackaging("paper")}>Paper Bags</button>
           </div>
           
-          <label style={{ ...s.label, marginTop: 12 }}>VAT Status</label>
-          <div style={s.toggleRow}>
-            <button style={s.toggleBtn(vat === "wd")} onClick={() => setVat("wd")}>
-              WD (Zero Rated)
-            </button>
-            <button style={s.toggleBtn(vat === "vat")} onClick={() => setVat("vat")}>
-              VAT (Standard)
-            </button>
+          <label style={{ ...s.label, marginTop: 14 }}>VAT Status</label>
+          <div style={s.segWrap}>
+            <button style={s.segBtn(vat === "wd")} onClick={() => setVat("wd")}>WD (Zero Rated)</button>
+            <button style={s.segBtn(vat === "vat")} onClick={() => setVat("vat")}>VAT (Standard)</button>
           </div>
         </div>
       </div>
@@ -956,14 +972,14 @@ export default function App() {
         {/* WORKING DOG */}
         <CategorySection title="Working Dog" count={catCounts.wd} open={openCats.wd} onToggle={() => toggleCat("wd")}>
           {WD.map((row, i) => (
-            <WDProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} />
+            <WDProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />
           ))}
         </CategorySection>
 
         {/* GOLDLINE */}
         <CategorySection title="Goldline" count={catCounts.gl} open={openCats.gl} onToggle={() => toggleCat("gl")}>
           {GL.map((row, i) => (
-            <GLProduct key={i} name={row[0]} sku={row[1]} price={row[2]} quantities={quantities} setQty={setQty} />
+            <GLProduct key={i} name={row[0]} sku={row[1]} price={row[2]} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />
           ))}
         </CategorySection>
 
@@ -980,7 +996,6 @@ export default function App() {
 
         {/* WET TRAYS */}
         <CategorySection title="Wet Trays" count={catCounts.wt} open={openCats.wt} onToggle={() => toggleCat("wt")}>
-          <div style={{ padding: "6px 16px 2px", fontSize: 11, color: colors.textMid }}>Non-VAT & VAT variants shown side by side · 10x395g</div>
           {wtGroups.map(g => (
             <ProteinGroup key={g.key} label={g.label} protein={g.key}>
               {g.items.map((row, i) => (
@@ -1032,6 +1047,7 @@ export default function App() {
               ]}
               quantities={quantities}
               setQty={setQty}
+              baseTotals={baseTotals}
             />
           ))}
           <ProductRow
@@ -1042,6 +1058,7 @@ export default function App() {
             ]}
             quantities={quantities}
             setQty={setQty}
+            baseTotals={baseTotals}
           />
         </CategorySection>
 
@@ -1081,7 +1098,7 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           {totalItems > 0 && (
-            <button onClick={clearOrder} style={{ ...s.reviewBtn, background: colors.dangerLight, color: colors.danger, padding: "12px 14px" }}>✕</button>
+            <button onClick={clearOrder} style={{ ...s.reviewBtn, background: colors.dangerLight, color: colors.danger, padding: 0, width: 46, borderRadius: 12 }}>✕</button>
           )}
           <button style={{ ...s.reviewBtn, opacity: totalItems === 0 ? 0.4 : 1 }} disabled={totalItems === 0} onClick={() => { setShowReview(true); setCopied(false); }}>
             Review Order
@@ -1093,6 +1110,7 @@ export default function App() {
       {showReview && (
         <div style={s.modal} onClick={() => setShowReview(false)}>
           <div style={s.modalContent} onClick={e => e.stopPropagation()}>
+            <div style={s.grabber} />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2 style={s.modalTitle}>Order Review</h2>
               <button onClick={() => setShowReview(false)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer", color: colors.textMid }}>✕</button>
