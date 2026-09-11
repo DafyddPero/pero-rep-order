@@ -875,6 +875,37 @@ export default function App() {
     return html;
   }, [customerName, packaging, vat, notes, orderList, carriage, totalNet, totalWeight, totalItems]);
 
+  const buildMailtoLink = useCallback(() => {
+    const subject = `Pero Trade Order${customerName ? ` - ${customerName}` : ""}`;
+    let body = `PERO TRADE ORDER\n\n`;
+    body += `Customer: ${customerName || "(not set)"}\n`;
+    body += `Packaging: ${packaging === "coloured" ? "Coloured Bags" : "Paper Bags"}\n`;
+    body += `VAT Status: ${vat === "vat" ? "VAT Registered" : "Working Dog (Zero Rated)"}\n`;
+    if (notes) body += `Notes: ${notes}\n`;
+    body += `\n---\n\n`;
+    body += `SKU | Qty | Description | Price | Total\n`;
+    body += `---|---|---|---|---\n`;
+    orderList.forEach(i => {
+      const displaySku = i.sku.replace(/-PLT$/, "");
+      const unitP = i.price > 0 ? `£${i.price.toFixed(2)}` : "TBC";
+      const totalP = i.price > 0 ? `£${(i.price * i.qty).toFixed(2)}` : "TBC";
+      body += `${displaySku} | ${i.qty} | ${i.desc} | ${unitP} | ${totalP}\n`;
+    });
+    if (carriage.sku) {
+      body += `${carriage.sku} | ${carriage.qty || 1} | ${carriage.desc} | £${carriage.cost.toFixed(2)} | £${((carriage.qty || 1) * carriage.cost).toFixed(2)}\n`;
+    }
+    body += `\n---\n\n`;
+    const pricedTotal = totalNet + (carriage.cost * (carriage.qty || 1));
+    body += `Net Total: £${pricedTotal.toFixed(2)} (excl. unpriced items)\n`;
+    body += `Total Weight: ${totalWeight.toFixed(1)}kg\n`;
+    body += `Items: ${totalItems}`;
+    
+    const recipients = "info@pero-petfood.co.uk,dafydd@pero-petfood.co.uk";
+    const encodedSubject = encodeURIComponent(subject);
+    const encodedBody = encodeURIComponent(body);
+    return `mailto:${recipients}?subject=${encodedSubject}&body=${encodedBody}`;
+  }, [customerName, packaging, vat, notes, orderList, carriage, totalNet, totalWeight, totalItems]);
+
   const handleCopy = useCallback(() => {
     const html = buildOrderText();
     // Try to copy as HTML for table formatting
@@ -1170,11 +1201,11 @@ export default function App() {
               </div>
             </div>
 
-            <button style={copied ? s.copied : s.copyBtn} onClick={handleCopy}>
-              {copied ? "✓ Copied to clipboard!" : "Copy Order to Clipboard"}
-            </button>
+            <a href={buildMailtoLink()} style={{ ...s.copyBtn, textDecoration: "none", display: "block", textAlign: "center", boxSizing: "border-box" }}>
+              Email Order
+            </a>
             <div style={{ fontSize: 11, color: colors.textMid, textAlign: "center", marginTop: 8 }}>
-              Paste into an email to send to customer services
+              Opens your email app with the order ready to send
             </div>
           </div>
         </div>
