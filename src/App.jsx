@@ -764,6 +764,7 @@ export default function App() {
   const [openCats, setOpenCats] = useState({});
   const [showReview, setShowReview] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [search, setSearch] = useState("");
 
   const setQty = useCallback((sku, qty, price, desc, weight) => {
     setOrderItems(prev => {
@@ -844,6 +845,32 @@ export default function App() {
   ]), []);
   const wtGroups = useMemo(() => groupWTByProtein(WT), []);
 
+  // ── SEARCH / FILTER ──
+  const q = search.trim().toLowerCase();
+  const searching = q.length > 0;
+  const filtered = useMemo(() => {
+    const m = (name) => !searching || name.toLowerCase().includes(q);
+    const fg = (groups) => groups
+      .map(g => ({ ...g, items: g.items.filter(r => m(r[0])) }))
+      .filter(g => g.items.length);
+    return {
+      gf: fg(gfGroups), wgf: fg(wgfGroups), cp: fg(cpGroups), wt: fg(wtGroups),
+      wd: WD.filter(r => m(r.name)),
+      gl: GL.filter(r => m(r[0])),
+      spwt: SPWT.filter(r => m(r[0])),
+      treats: TREATS.filter(r => m(r[0])),
+      pero: PERO.filter(r => m(r[0])),
+      mt: MT.filter(r => m(r[0])),
+      catDry: CAT_DRY.filter(r => m(r[0])),
+      catCan: m(CAT_CAN.name),
+    };
+  }, [q, searching, gfGroups, wgfGroups, cpGroups, wtGroups]);
+  const noResults = searching && !(
+    filtered.gf.length || filtered.wgf.length || filtered.cp.length || filtered.wt.length ||
+    filtered.wd.length || filtered.gl.length || filtered.spwt.length || filtered.treats.length ||
+    filtered.pero.length || filtered.mt.length || filtered.catDry.length || filtered.catCan
+  );
+
   const buildOrderText = useCallback(() => {
     // Build as HTML table for better paste formatting
     let html = `<table border="1" cellpadding="8" cellspacing="0" style="border-collapse:collapse; font-family:Arial, sans-serif; width:100%;">`;
@@ -877,33 +904,38 @@ export default function App() {
 
   const buildMailtoLink = useCallback(() => {
     const subject = `Pero Trade Order${customerName ? ` - ${customerName}` : ""}`;
-    let body = `PERO TRADE ORDER\n\n`;
-    body += `Customer: ${customerName || "(not set)"}\n`;
-    body += `Packaging: ${packaging === "coloured" ? "Coloured Bags" : "Paper Bags"}\n`;
-    body += `VAT Status: ${vat === "vat" ? "VAT Registered" : "Working Dog (Zero Rated)"}\n`;
-    if (notes) body += `Notes: ${notes}\n`;
-    body += `\n---\n\n`;
-    body += `SKU | Qty | Description | Price | Total\n`;
-    body += `---|---|---|---|---\n`;
+    const rule = "----------------------------------------";
+    const L = [];
+    L.push("PERO TRADE ORDER");
+    L.push(rule);
+    L.push(`Customer:   ${customerName || "(not set)"}`);
+    L.push(`Packaging:  ${packaging === "coloured" ? "Coloured Bags" : "Paper Bags"}`);
+    L.push(`VAT status: ${vat === "vat" ? "VAT Registered" : "Working Dog (Zero Rated)"}`);
+    if (notes) L.push(`Notes:      ${notes}`);
+    L.push("");
+    L.push("ORDER");
+    L.push(rule);
     orderList.forEach(i => {
       const displaySku = i.sku.replace(/-PLT$/, "");
-      const unitP = i.price > 0 ? `£${i.price.toFixed(2)}` : "TBC";
-      const totalP = i.price > 0 ? `£${(i.price * i.qty).toFixed(2)}` : "TBC";
-      body += `${displaySku} | ${i.qty} | ${i.desc} | ${unitP} | ${totalP}\n`;
+      const line = i.price > 0
+        ? `${i.qty} x ${i.desc}  (${displaySku})  @ £${i.price.toFixed(2)} = £${(i.price * i.qty).toFixed(2)}`
+        : `${i.qty} x ${i.desc}  (${displaySku})  = price TBC`;
+      L.push(line);
     });
+    L.push(rule);
     if (carriage.sku) {
-      body += `${carriage.sku} | ${carriage.qty || 1} | ${carriage.desc} | £${carriage.cost.toFixed(2)} | £${((carriage.qty || 1) * carriage.cost).toFixed(2)}\n`;
+      const cCost = (carriage.cost * (carriage.qty || 1));
+      L.push(carriage.sku === "FREE"
+        ? "Carriage:  FREE (order over £1,750 net)"
+        : `Carriage:  ${carriage.desc} - £${cCost.toFixed(2)} +VAT`);
     }
-    body += `\n---\n\n`;
-    const pricedTotal = totalNet + (carriage.cost * (carriage.qty || 1));
-    body += `Net Total: £${pricedTotal.toFixed(2)} (excl. unpriced items)\n`;
-    body += `Total Weight: ${totalWeight.toFixed(1)}kg\n`;
-    body += `Items: ${totalItems}`;
-    
+    L.push("");
+    L.push(`GOODS NET:  £${totalNet.toFixed(2)}`);
+    L.push(`WEIGHT:     ${totalWeight.toFixed(1)} kg`);
+    L.push(`ITEMS:      ${totalItems}`);
+
     const recipients = "info@pero-petfood.co.uk,dafydd@pero-petfood.co.uk";
-    const encodedSubject = encodeURIComponent(subject);
-    const encodedBody = encodeURIComponent(body);
-    return `mailto:${recipients}?subject=${encodedSubject}&body=${encodedBody}`;
+    return `mailto:${recipients}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(L.join("\n"))}`;
   }, [customerName, packaging, vat, notes, orderList, carriage, totalNet, totalWeight, totalItems]);
 
   const handleCopy = useCallback(() => {
@@ -950,6 +982,21 @@ export default function App() {
       <div style={s.header}>
         <h1 style={s.headerTitle}>Pero Trade Order</h1>
         <div style={s.headerSub}>Rep ordering system</div>
+        <div style={{ position: "relative", marginTop: 12 }}>
+          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: colors.textMid, fontSize: 15, pointerEvents: "none" }}>⌕</span>
+          <input
+            style={{ ...s.input, background: "rgba(255,255,255,0.92)", padding: "10px 34px 10px 32px", fontSize: 16 }}
+            placeholder="Search products…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          {search && (
+            <button onClick={() => setSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: "none", background: colors.textLight, color: "#fff", width: 20, height: 20, borderRadius: "50%", fontSize: 13, lineHeight: "20px", cursor: "pointer", padding: 0 }}>×</button>
+          )}
+        </div>
       </div>
 
       {/* ORDER SETTINGS */}
@@ -977,10 +1024,17 @@ export default function App() {
 
       {/* CATEGORIES */}
       <div style={s.section}>
-        
+
+        {noResults && (
+          <div style={{ ...s.card, textAlign: "center", color: colors.textMid, marginTop: 8 }}>
+            No products match “{search}”.
+          </div>
+        )}
+
         {/* GRAIN FREE */}
-        <CategorySection title="Grain Free" count={catCounts.gf} open={openCats.gf} onToggle={() => toggleCat("gf")}>
-          {gfGroups.map(g => (
+        {(!searching || filtered.gf.length > 0) && (
+        <CategorySection title="Grain Free" count={catCounts.gf} open={searching ? true : openCats.gf} onToggle={() => toggleCat("gf")}>
+          {filtered.gf.map(g => (
             <ProteinGroup key={g.key} label={g.label} protein={g.key}>
               {g.items.map((row, i) => (
                 <MatrixProduct key={i} row={row} pkg={packaging} vat={vat} quantities={quantities} setQty={setQty} cat="gf" />
@@ -988,10 +1042,12 @@ export default function App() {
             </ProteinGroup>
           ))}
         </CategorySection>
+        )}
 
         {/* GLUTEN FREE */}
-        <CategorySection title="Gluten Free" count={catCounts.wgf} open={openCats.wgf} onToggle={() => toggleCat("wgf")}>
-          {wgfGroups.map(g => (
+        {(!searching || filtered.wgf.length > 0) && (
+        <CategorySection title="Gluten Free" count={catCounts.wgf} open={searching ? true : openCats.wgf} onToggle={() => toggleCat("wgf")}>
+          {filtered.wgf.map(g => (
             <ProteinGroup key={g.key} label={g.label} protein={g.key}>
               {g.items.map((row, i) => (
                 <MatrixProduct key={i} row={row} pkg={packaging} vat={vat} quantities={quantities} setQty={setQty} cat="wgf" />
@@ -999,24 +1055,30 @@ export default function App() {
             </ProteinGroup>
           ))}
         </CategorySection>
+        )}
 
         {/* WORKING DOG */}
-        <CategorySection title="Working Dog" count={catCounts.wd} open={openCats.wd} onToggle={() => toggleCat("wd")}>
-          {WD.map((row, i) => (
+        {(!searching || filtered.wd.length > 0) && (
+        <CategorySection title="Working Dog" count={catCounts.wd} open={searching ? true : openCats.wd} onToggle={() => toggleCat("wd")}>
+          {filtered.wd.map((row, i) => (
             <WDProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />
           ))}
         </CategorySection>
+        )}
 
         {/* GOLDLINE */}
-        <CategorySection title="Goldline" count={catCounts.gl} open={openCats.gl} onToggle={() => toggleCat("gl")}>
-          {GL.map((row, i) => (
+        {(!searching || filtered.gl.length > 0) && (
+        <CategorySection title="Goldline" count={catCounts.gl} open={searching ? true : openCats.gl} onToggle={() => toggleCat("gl")}>
+          {filtered.gl.map((row, i) => (
             <GLProduct key={i} name={row[0]} sku={row[1]} price={row[2]} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />
           ))}
         </CategorySection>
+        )}
 
         {/* COLD PRESSED */}
-        <CategorySection title="Cold Pressed" count={catCounts.cp} open={openCats.cp} onToggle={() => toggleCat("cp")}>
-          {cpGroups.map(g => (
+        {(!searching || filtered.cp.length > 0) && (
+        <CategorySection title="Cold Pressed" count={catCounts.cp} open={searching ? true : openCats.cp} onToggle={() => toggleCat("cp")}>
+          {filtered.cp.map(g => (
             <ProteinGroup key={g.key} label={g.label} accent={g.accent} bg={g.bg}>
               {g.items.map((row, i) => (
                 <CPProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} />
@@ -1024,10 +1086,12 @@ export default function App() {
             </ProteinGroup>
           ))}
         </CategorySection>
+        )}
 
         {/* WET TRAYS */}
-        <CategorySection title="Wet Trays" count={catCounts.wt} open={openCats.wt} onToggle={() => toggleCat("wt")}>
-          {wtGroups.map(g => (
+        {(!searching || filtered.wt.length > 0) && (
+        <CategorySection title="Wet Trays" count={catCounts.wt} open={searching ? true : openCats.wt} onToggle={() => toggleCat("wt")}>
+          {filtered.wt.map(g => (
             <ProteinGroup key={g.key} label={g.label} protein={g.key}>
               {g.items.map((row, i) => (
                 <WTProduct key={i} row={row} quantities={quantities} setQty={setQty} />
@@ -1035,40 +1099,50 @@ export default function App() {
             </ProteinGroup>
           ))}
         </CategorySection>
+        )}
 
         {/* SUPER PREMIUM WET TRAYS */}
-        <CategorySection title="Super Premium Wet Trays" count={catCounts.spwt} open={openCats.spwt} onToggle={() => toggleCat("spwt")}>
-          <div style={{ padding: "4px 16px 2px", fontSize: 11, color: colors.textMid }}>VAT only — 9x300g trays</div>
-          {SPWT.map((row, i) => (
+        {(!searching || filtered.spwt.length > 0) && (
+        <CategorySection title="Super Premium Wet Trays" count={catCounts.spwt} open={searching ? true : openCats.spwt} onToggle={() => toggleCat("spwt")}>
+          {!searching && <div style={{ padding: "4px 16px 2px", fontSize: 11, color: colors.textMid }}>VAT only — 9x300g trays</div>}
+          {filtered.spwt.map((row, i) => (
             <SimpleProduct key={i} name={row[0]} sku={row[1]} price={row[2]} size="9x300g" quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
+        )}
 
         {/* TREATS (combined — retail, bulk bag, bulk box side by side) */}
-        <CategorySection title="Treats" count={catCounts.treats} open={openCats.treats} onToggle={() => toggleCat("treats")}>
-          {TREATS.map((group, i) => (
+        {(!searching || filtered.treats.length > 0) && (
+        <CategorySection title="Treats" count={catCounts.treats} open={searching ? true : openCats.treats} onToggle={() => toggleCat("treats")}>
+          {filtered.treats.map((group, i) => (
             <TreatGroup key={i} group={group} quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
+        )}
 
         {/* PERO / TRULINE (Premium — High Meat range + Truline).
             Premiwm/Active/Maintenance live in Working Dog above. */}
-        <CategorySection title="Pero / Truline (Premium)" count={catCounts.pero} open={openCats.pero} onToggle={() => toggleCat("pero")}>
-          {PERO.map((row, i) => (
+        {(!searching || filtered.pero.length > 0) && (
+        <CategorySection title="Pero / Truline (Premium)" count={catCounts.pero} open={searching ? true : openCats.pero} onToggle={() => toggleCat("pero")}>
+          {filtered.pero.map((row, i) => (
             <PeroProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
+        )}
 
         {/* MEAL TOPPERS */}
-        <CategorySection title="Meal Toppers" count={catCounts.mt} open={openCats.mt} onToggle={() => toggleCat("mt")}>
-          {MT.map((row, i) => (
+        {(!searching || filtered.mt.length > 0) && (
+        <CategorySection title="Meal Toppers" count={catCounts.mt} open={searching ? true : openCats.mt} onToggle={() => toggleCat("mt")}>
+          {filtered.mt.map((row, i) => (
             <SimpleProduct key={i} name={row[0]} sku={row[1]} price={row[3]} size={row[2]} quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
+        )}
 
         {/* CAT */}
-        <CategorySection title="Cat" count={catCounts.cat} open={openCats.cat} onToggle={() => toggleCat("cat")}>
-          {CAT_DRY.map((row, i) => (
+        {(!searching || filtered.catDry.length > 0 || filtered.catCan) && (
+        <CategorySection title="Cat" count={catCounts.cat} open={searching ? true : openCats.cat} onToggle={() => toggleCat("cat")}>
+          {filtered.catDry.map((row, i) => (
             <ProductRow
               key={i}
               name={row[0]}
@@ -1081,6 +1155,7 @@ export default function App() {
               baseTotals={baseTotals}
             />
           ))}
+          {filtered.catCan && (
           <ProductRow
             name={CAT_CAN.name}
             cells={[
@@ -1091,9 +1166,12 @@ export default function App() {
             setQty={setQty}
             baseTotals={baseTotals}
           />
+          )}
         </CategorySection>
+        )}
 
         {/* COLLAPSE/EXPAND ALL */}
+        {!searching && (
         <div style={{ display: "flex", gap: 8, padding: "16px 12px" }}>
           <button onClick={() => {
             const allCats = ['gf', 'wgf', 'wd', 'gl', 'cp', 'wt', 'spwt', 'treats', 'pero', 'mt', 'cat'];
@@ -1105,6 +1183,7 @@ export default function App() {
             Collapse All
           </button>
         </div>
+        )}
 
       </div>
 
@@ -1188,16 +1267,25 @@ export default function App() {
               </table>
             </div>
 
-            <div style={{ marginTop: 16, padding: 12, background: colors.primaryLight, borderRadius: 8, display: "flex", justifyContent: "space-between" }}>
-              <div>
-                <div style={{ fontSize: 12, color: colors.textMid }}>Net Total</div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: colors.primary }}>
-                  £{(totalNet + (carriage.cost * (carriage.qty || 1))).toFixed(2)}
-                </div>
+            <div style={{ marginTop: 16, padding: 14, background: colors.primaryLight, borderRadius: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 4 }}>
+                <span style={{ color: colors.textMid }}>Goods (net)</span>
+                <span style={{ fontWeight: 600 }}>£{totalNet.toFixed(2)}</span>
               </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 12, color: colors.textMid }}>Weight</div>
-                <div style={{ fontSize: 16, fontWeight: 600 }}>{totalWeight.toFixed(1)}kg</div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, marginBottom: 8 }}>
+                <span style={{ color: colors.textMid }}>Carriage {carriage.sku === "FREE" ? "" : "(est. +VAT)"}</span>
+                <span style={{ fontWeight: 600 }}>{carriage.sku === "FREE" ? "FREE" : `£${(carriage.cost * (carriage.qty || 1)).toFixed(2)}`}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", borderTop: `1px solid ${colors.border}`, paddingTop: 8 }}>
+                <div>
+                  <div style={{ fontSize: 12, color: colors.textMid }}>Order Total</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: colors.primary, letterSpacing: -0.5 }}>
+                    £{(totalNet + (carriage.cost * (carriage.qty || 1))).toFixed(2)}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontSize: 12, color: colors.textMid }}>{totalWeight.toFixed(1)} kg · {totalItems} items</div>
+                </div>
               </div>
             </div>
 
@@ -1207,6 +1295,9 @@ export default function App() {
             <div style={{ fontSize: 11, color: colors.textMid, textAlign: "center", marginTop: 8 }}>
               Opens your email app with the order ready to send
             </div>
+            <button onClick={handleCopy} style={{ width: "100%", padding: "12px", marginTop: 10, background: "transparent", color: copied ? colors.primary : colors.textMid, border: `1px solid ${colors.border}`, borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily }}>
+              {copied ? "✓ Copied — paste into an email" : "Copy as formatted table"}
+            </button>
           </div>
         </div>
       )}
