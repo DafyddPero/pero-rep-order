@@ -51,12 +51,12 @@ const CP = [
 // Other
 ["Turkey Slim Down","turkey","CP007","CP008","CP009",5.86,14.63,35.12],
 ["Chicken & Sweet Potato","chicken","CP010","CP011","CP012",5.91,14.78,36.29],
-["Calm Down Dog","mixed","CP013","CP014","CP015",5.91,14.78,36.29],
+["Turkey Calming","mixed","CP013","CP014","CP015",5.91,14.78,36.29],
 ["Beef & Sweet Potato","beef","CP016","CP017","CP018",5.91,14.78,36.29],
 ["Lamb & Sweet Potato","lamb","CP019","CP020","CP021",6.38,15.94,38.26],
 ["Turkey Gastro","turkey","CP022","CP023","CP024",6.45,16.12,38.70],
 ["Salmon & Sweet Potato","salmon","CP025","CP026","CP027",6.86,17.16,41.17],
-["Immunity Booster","mixed","CP031","CP032","CP033",6.86,17.16,41.17],
+["Turkey Support","mixed","CP031","CP032","CP033",6.86,17.16,41.17],
 ["Rabbit & Sweet Potato","rabbit","CP043","CP044","CP045",10.27,25.68,61.63],
 ["Insect Protein & Sweet Potato","insect","CP046","CP047","CP048",5.91,15.78,36.29]
 ];
@@ -152,6 +152,43 @@ const CAT_DRY = [
 // Cat cans (price break + pallet handled like dog cans)
 const CAT_CAN = {name:"Celt Canned Wet (Cats)", sku:"C0005", price:6.70, pallet:192, caseWeight:3.95};
 
+// ── DEALS (weekly promotions) ──
+// Each deal resolves to the same SKU as the normal product, but is stored under a
+// "<sku>-DEAL" key at the promo price so it never collides with a full-price line.
+// kind "matrix" = GF/GLUTEN item (respects packaging + VAT); "cp" = adds V on VAT; "gl" = fixed.
+const DEALS_INFO = { title: "This week's deals", dates: "14 Sep – 23 Oct" };
+const DEALS = [
+  { name:"Chicken & Rice (Large Breed)", size:"12kg", was:28.90, now:24.57, pct:15, kind:"matrix", coloured:"SR0123", paper:"SR0355" },
+  { name:"Chicken & Rice (Senior/Light)", size:"12kg", was:25.79, now:21.92, pct:15, kind:"matrix", coloured:"SR0045", paper:"SR0287" },
+  { name:"Puppy Complete", size:"10kg", was:25.50, now:21.68, pct:15, kind:"matrix", coloured:"SR0050", paper:"SR0288" },
+  { name:"Salmon & Potato (Sensitive)", size:"12kg", was:32.94, now:29.65, pct:10, kind:"matrix", coloured:"", paper:"SR0478" },
+  { name:"Super 75 (Meat & Fish)", size:"12kg", was:41.49, now:35.27, pct:15, kind:"matrix", coloured:"", paper:"SR0442" },
+  { name:"Super 75 (Fish)", size:"12kg", was:45.20, now:38.42, pct:15, kind:"matrix", coloured:"", paper:"SR0444" },
+  { name:"Turkey Support (Cold Pressed)", size:"12kg", was:41.17, now:37.06, pct:10, kind:"cp", base:"CP033" },
+  { name:"Turkey Slim Down (Cold Pressed)", size:"12kg", was:35.12, now:31.61, pct:10, kind:"cp", base:"CP009" },
+  { name:"Turkey Calming (Cold Pressed)", size:"12kg", was:36.29, now:32.66, pct:10, kind:"cp", base:"CP015" },
+  { name:"Wholemeal Mixer", size:"15kg", was:15.81, now:11.86, pct:25, kind:"gl", sku:"GD011" },
+  { name:"Salmon, Rice, Oats & Vegetables", size:"15kg", was:30.23, now:27.21, pct:10, kind:"gl", sku:"GD003" },
+  { name:"Adult Tripe (Wheat Gluten Free)", size:"15kg", was:28.94, now:26.05, pct:10, kind:"gl", sku:"GD009" },
+];
+
+// Resolve a deal to its real base SKU given current packaging/VAT toggles.
+function resolveDealSku(deal, packaging, vat) {
+  let sku;
+  if (deal.kind === "matrix") {
+    sku = packaging === "coloured" ? (deal.coloured || deal.paper) : (deal.paper || deal.coloured);
+    if (sku && vat === "vat") sku += "V";
+  } else if (deal.kind === "cp") {
+    sku = deal.base;
+    if (vat === "vat") sku += "V";
+  } else {
+    sku = deal.sku; // gl — no V variant in app
+  }
+  return sku;
+}
+
+const stripKey = (sku) => sku.replace(/-PLT$/, "").replace(/-DEAL$/, "");
+
 
 // ── TREATS DATA (unified) ──
 // [name, [[sku, sizeLabel, price], ... up to 3 order sizes]]
@@ -202,6 +239,34 @@ const TREATS = [
 ["Beef Ears with Hair",[["TRT118","60pcs",42.00]]],
 ["Beef Leg Bone",[["TRT119","25pcs",38.00]]]
 ];
+
+// SKU → category label, built once from the data, for grouping the emailed order.
+const SKU_CATEGORY = (() => {
+  const map = {};
+  const add = (sku, cat) => { if (sku) map[sku] = cat; };
+  GF.forEach(r => [2,3,4,5,6,7,8,9].forEach(i => add(r[i], "Grain Free")));
+  WGF.forEach(r => [2,3,4,5,6,7,8,9].forEach(i => add(r[i], "Gluten Free")));
+  CP.forEach(r => [2,3,4].forEach(i => { add(r[i], "Cold Pressed"); add(r[i] + "V", "Cold Pressed"); }));
+  WD.forEach(r => { add(r.wd, "Working Dog"); add(r.vat, "Working Dog"); });
+  GL.forEach(r => add(r[1], "Goldline"));
+  WT.forEach(r => { add(r[2], "Wet Trays"); add(r[2] + "V", "Wet Trays"); });
+  SPWT.forEach(r => add(r[1], "Super Premium Wet Trays"));
+  TREATS.forEach(g => g[1].forEach(([sku]) => add(sku, "Treats")));
+  PERO.forEach(r => [1,2].forEach(i => String(r[i]).split("|").forEach(sk => add(sk, "Pero / Truline"))));
+  MT.forEach(r => add(r[1], "Meal Toppers"));
+  CAT_DRY.forEach(r => { add(r[1], "Cat"); add(r[4], "Cat"); });
+  add(CAT_CAN.sku, "Cat");
+  return map;
+})();
+
+function categoryOf(sku) {
+  if (sku.endsWith("-DEAL")) return "Deals";
+  const k = stripKey(sku);
+  return SKU_CATEGORY[k] || SKU_CATEGORY[k.replace(/V$/, "")] || "Other";
+}
+
+// Order categories appear in the emailed order.
+const CATEGORY_ORDER = ["Deals", "Grain Free", "Gluten Free", "Working Dog", "Goldline", "Cold Pressed", "Wet Trays", "Super Premium Wet Trays", "Treats", "Pero / Truline", "Meal Toppers", "Cat", "Other"];
 
 
 // ── SKU RESOLUTION ──
@@ -443,6 +508,7 @@ const s = {
   copyBtn: { width: "100%", padding: "14px", background: colors.primary, color: "#fff", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: "pointer", marginTop: 16, fontFamily },
   copied: { width: "100%", padding: "14px", background: colors.accent, color: "#fff", border: "none", borderRadius: 12, fontSize: 16, fontWeight: 600, cursor: "pointer", marginTop: 16, fontFamily },
   treatName: { fontSize: 15, fontWeight: 500, marginBottom: 2, letterSpacing: -0.1 },
+  dealBadge: { fontSize: 10, fontWeight: 800, color: "#fff", background: colors.primary, borderRadius: 6, padding: "2px 7px", letterSpacing: 0.2, whiteSpace: "nowrap" },
   catFooterCollapse: { textAlign: "center", padding: "12px", color: colors.primary, fontSize: 14, fontWeight: 500, cursor: "pointer", background: "#fff", borderTop: `0.5px solid ${colors.border}`, borderRadius: "0 0 14px 14px", fontFamily },
 };
 
@@ -729,6 +795,35 @@ function TreatGroup({ group, quantities, setQty }) {
 }
 
 
+function DealProduct({ deal, packaging, vat, quantities, setQty }) {
+  const realSku = resolveDealSku(deal, packaging, vat);
+  if (!realSku) return null;
+  const key = realSku + "-DEAL";
+  return (
+    <div style={s.productRow(null)}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 15, fontWeight: 500, letterSpacing: -0.1 }}>{deal.name}</span>
+          <span style={s.dealBadge}>{deal.pct}% OFF</span>
+        </div>
+        <div style={{ fontSize: 12, color: colors.textMid, marginTop: 3 }}>
+          {deal.size} · <span style={{ textDecoration: "line-through" }}>£{deal.was.toFixed(2)}</span>{" "}
+          <span style={{ color: colors.primary, fontWeight: 700 }}>£{deal.now.toFixed(2)}</span>
+        </div>
+      </div>
+      <Stepper
+        sku={key}
+        qtyValue={quantities[key] || 0}
+        price={deal.now}
+        desc={`${deal.name} ${deal.size} (${deal.pct}% deal)`}
+        weight={weightOf(deal.size)}
+        onSet={setQty}
+        priceLabel={`£${deal.now.toFixed(2)}`}
+      />
+    </div>
+  );
+}
+
 // ── GROUP PRODUCTS BY PROTEIN ──
 function groupByProtein(products) {
   const order = ["chicken", "salmon", "duck", "turkey", "lamb", "pork", "beef", "mixed"];
@@ -764,7 +859,6 @@ export default function App() {
   const [openCats, setOpenCats] = useState({});
   const [showReview, setShowReview] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [search, setSearch] = useState("");
 
   const setQty = useCallback((sku, qty, price, desc, weight) => {
     setOrderItems(prev => {
@@ -816,20 +910,22 @@ export default function App() {
   // Count items per category
   const catCounts = useMemo(() => {
     const c = {};
+    c.deals = orderList.filter(i => i.sku.endsWith("-DEAL")).reduce((s,i) => s + i.qty, 0);
+    const base = orderList.filter(i => !i.sku.endsWith("-DEAL"));
     const gfSkus = GF.flatMap(r => [r[2],r[3],r[4],r[5],r[6],r[7],r[8],r[9]]).filter(Boolean);
     const wgfSkus = WGF.flatMap(r => [r[2],r[3],r[4],r[5],r[6],r[7],r[8],r[9]]).filter(Boolean);
-    c.gf = orderList.filter(i => gfSkus.includes(i.sku.split('-')[0])).reduce((s,i) => s + i.qty, 0);
-    c.wgf = orderList.filter(i => wgfSkus.includes(i.sku.split('-')[0])).reduce((s,i) => s + i.qty, 0);
-    c.cp = orderList.filter(i => i.sku.startsWith("CP")).reduce((s,i) => s + i.qty, 0);
+    c.gf = base.filter(i => gfSkus.includes(i.sku.split('-')[0])).reduce((s,i) => s + i.qty, 0);
+    c.wgf = base.filter(i => wgfSkus.includes(i.sku.split('-')[0])).reduce((s,i) => s + i.qty, 0);
+    c.cp = base.filter(i => i.sku.startsWith("CP")).reduce((s,i) => s + i.qty, 0);
     const wdSKUs = ["SR0351","SR0399","SR0397","SR0353","SR0398","SR0352","SR0118","SR0109","SR0450","SR0451","C0004","P0015","P0014","P0020","P0021"];
-    c.wd = orderList.filter(i => wdSKUs.some(p => i.sku.startsWith(p) || i.sku === p)).reduce((s,i) => s + i.qty, 0);
-    c.gl = orderList.filter(i => i.sku.startsWith("GD")).reduce((s,i) => s + i.qty, 0);
-    c.wt = orderList.filter(i => WT.some(r => i.sku === r[2] || i.sku === r[2] + "V")).reduce((s,i) => s + i.qty, 0);
-    c.spwt = orderList.filter(i => ["SR0489","SR0490","SR0491","SR0492","SR0493"].some(p => i.sku.startsWith(p))).reduce((s,i) => s + i.qty, 0);
-    c.treats = orderList.filter(i => i.sku.startsWith("TRT")).reduce((s,i) => s + i.qty, 0);
-    c.mt = orderList.filter(i => i.sku.includes("X7")).reduce((s,i) => s + i.qty, 0);
-    c.pero = orderList.filter(i => /^P00(38|39|40|37|18|19|71|72|73|74|75|76|77|78|79|80|81|82)/.test(i.sku) || i.sku.startsWith("TRU")).reduce((s,i) => s + i.qty, 0);
-    c.cat = orderList.filter(i => ["SR0215","SR0164","C0005"].some(p => i.sku.startsWith(p))).reduce((s,i) => s + i.qty, 0);
+    c.wd = base.filter(i => wdSKUs.some(p => i.sku.startsWith(p) || i.sku === p)).reduce((s,i) => s + i.qty, 0);
+    c.gl = base.filter(i => i.sku.startsWith("GD")).reduce((s,i) => s + i.qty, 0);
+    c.wt = base.filter(i => WT.some(r => i.sku === r[2] || i.sku === r[2] + "V")).reduce((s,i) => s + i.qty, 0);
+    c.spwt = base.filter(i => ["SR0489","SR0490","SR0491","SR0492","SR0493"].some(p => i.sku.startsWith(p))).reduce((s,i) => s + i.qty, 0);
+    c.treats = base.filter(i => i.sku.startsWith("TRT")).reduce((s,i) => s + i.qty, 0);
+    c.mt = base.filter(i => i.sku.includes("X7")).reduce((s,i) => s + i.qty, 0);
+    c.pero = base.filter(i => /^P00(38|39|40|37|18|19|71|72|73|74|75|76|77|78|79|80|81|82)/.test(i.sku) || i.sku.startsWith("TRU")).reduce((s,i) => s + i.qty, 0);
+    c.cat = base.filter(i => ["SR0215","SR0164","C0005"].some(p => i.sku.startsWith(p))).reduce((s,i) => s + i.qty, 0);
     return c;
   }, [orderList]);
 
@@ -844,32 +940,6 @@ export default function App() {
       items: CP.filter(r => !r[0].startsWith("80/20") && !/with Grain/i.test(r[0])) },
   ]), []);
   const wtGroups = useMemo(() => groupWTByProtein(WT), []);
-
-  // ── SEARCH / FILTER ──
-  const q = search.trim().toLowerCase();
-  const searching = q.length > 0;
-  const filtered = useMemo(() => {
-    const m = (name) => !searching || name.toLowerCase().includes(q);
-    const fg = (groups) => groups
-      .map(g => ({ ...g, items: g.items.filter(r => m(r[0])) }))
-      .filter(g => g.items.length);
-    return {
-      gf: fg(gfGroups), wgf: fg(wgfGroups), cp: fg(cpGroups), wt: fg(wtGroups),
-      wd: WD.filter(r => m(r.name)),
-      gl: GL.filter(r => m(r[0])),
-      spwt: SPWT.filter(r => m(r[0])),
-      treats: TREATS.filter(r => m(r[0])),
-      pero: PERO.filter(r => m(r[0])),
-      mt: MT.filter(r => m(r[0])),
-      catDry: CAT_DRY.filter(r => m(r[0])),
-      catCan: m(CAT_CAN.name),
-    };
-  }, [q, searching, gfGroups, wgfGroups, cpGroups, wtGroups]);
-  const noResults = searching && !(
-    filtered.gf.length || filtered.wgf.length || filtered.cp.length || filtered.wt.length ||
-    filtered.wd.length || filtered.gl.length || filtered.spwt.length || filtered.treats.length ||
-    filtered.pero.length || filtered.mt.length || filtered.catDry.length || filtered.catCan
-  );
 
   const buildOrderText = useCallback(() => {
     // Build as HTML table for better paste formatting
@@ -887,7 +957,7 @@ export default function App() {
     orderList.forEach(i => {
       const unitP = i.price > 0 ? `£${i.price.toFixed(2)}` : "TBC";
       const totalP = i.price > 0 ? `£${(i.price * i.qty).toFixed(2)}` : "TBC";
-      const displaySku = i.sku.replace(/-PLT$/, "");
+      const displaySku = stripKey(i.sku);
       html += `<tr><td>${displaySku}</td><td>${i.qty}</td><td>${i.desc}</td><td>${unitP}</td><td>${totalP}</td></tr>`;
     });
     if (carriage.sku) {
@@ -915,12 +985,20 @@ export default function App() {
     L.push("");
     L.push("ORDER");
     L.push(rule);
+    // Group the order lines by category, in a fixed order, with a gap between each.
+    const groups = {};
     orderList.forEach(i => {
-      const displaySku = i.sku.replace(/-PLT$/, "");
-      const line = i.price > 0
-        ? `${i.qty} x ${i.desc}  (${displaySku})  @ £${i.price.toFixed(2)} = £${(i.price * i.qty).toFixed(2)}`
-        : `${i.qty} x ${i.desc}  (${displaySku})  = price TBC`;
-      L.push(line);
+      const cat = categoryOf(i.sku);
+      (groups[cat] = groups[cat] || []).push(i);
+    });
+    CATEGORY_ORDER.filter(cat => groups[cat]).forEach((cat, gi) => {
+      if (gi > 0) L.push("");
+      L.push(`[ ${cat.toUpperCase()} ]`);
+      groups[cat].forEach(i => {
+        const sku = stripKey(i.sku);
+        const total = i.price > 0 ? ` = £${(i.price * i.qty).toFixed(2)}` : " = price TBC";
+        L.push(`${i.qty} x ${sku} ${i.desc}${total}`);
+      });
     });
     L.push(rule);
     if (carriage.sku) {
@@ -982,21 +1060,6 @@ export default function App() {
       <div style={s.header}>
         <h1 style={s.headerTitle}>Pero Trade Order</h1>
         <div style={s.headerSub}>Rep ordering system</div>
-        <div style={{ position: "relative", marginTop: 12 }}>
-          <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: colors.textMid, fontSize: 15, pointerEvents: "none" }}>⌕</span>
-          <input
-            style={{ ...s.input, background: "rgba(255,255,255,0.92)", padding: "10px 34px 10px 32px", fontSize: 16 }}
-            placeholder="Search products…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          {search && (
-            <button onClick={() => setSearch("")} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: "none", background: colors.textLight, color: "#fff", width: 20, height: 20, borderRadius: "50%", fontSize: 13, lineHeight: "20px", cursor: "pointer", padding: 0 }}>×</button>
-          )}
-        </div>
       </div>
 
       {/* ORDER SETTINGS */}
@@ -1025,16 +1088,17 @@ export default function App() {
       {/* CATEGORIES */}
       <div style={s.section}>
 
-        {noResults && (
-          <div style={{ ...s.card, textAlign: "center", color: colors.textMid, marginTop: 8 }}>
-            No products match “{search}”.
-          </div>
-        )}
+        {/* DEALS */}
+        <CategorySection title="🏷 Deals" count={catCounts.deals} open={openCats.deals} onToggle={() => toggleCat("deals")}>
+          <div style={{ padding: "8px 16px 4px", fontSize: 12, color: colors.textMid }}>{DEALS_INFO.title} · {DEALS_INFO.dates}</div>
+          {DEALS.map((deal, i) => (
+            <DealProduct key={i} deal={deal} packaging={packaging} vat={vat} quantities={quantities} setQty={setQty} />
+          ))}
+        </CategorySection>
 
         {/* GRAIN FREE */}
-        {(!searching || filtered.gf.length > 0) && (
-        <CategorySection title="Grain Free" count={catCounts.gf} open={searching ? true : openCats.gf} onToggle={() => toggleCat("gf")}>
-          {filtered.gf.map(g => (
+        <CategorySection title="Grain Free" count={catCounts.gf} open={openCats.gf} onToggle={() => toggleCat("gf")}>
+          {gfGroups.map(g => (
             <ProteinGroup key={g.key} label={g.label} protein={g.key}>
               {g.items.map((row, i) => (
                 <MatrixProduct key={i} row={row} pkg={packaging} vat={vat} quantities={quantities} setQty={setQty} cat="gf" />
@@ -1042,12 +1106,10 @@ export default function App() {
             </ProteinGroup>
           ))}
         </CategorySection>
-        )}
 
         {/* GLUTEN FREE */}
-        {(!searching || filtered.wgf.length > 0) && (
-        <CategorySection title="Gluten Free" count={catCounts.wgf} open={searching ? true : openCats.wgf} onToggle={() => toggleCat("wgf")}>
-          {filtered.wgf.map(g => (
+        <CategorySection title="Gluten Free" count={catCounts.wgf} open={openCats.wgf} onToggle={() => toggleCat("wgf")}>
+          {wgfGroups.map(g => (
             <ProteinGroup key={g.key} label={g.label} protein={g.key}>
               {g.items.map((row, i) => (
                 <MatrixProduct key={i} row={row} pkg={packaging} vat={vat} quantities={quantities} setQty={setQty} cat="wgf" />
@@ -1055,30 +1117,24 @@ export default function App() {
             </ProteinGroup>
           ))}
         </CategorySection>
-        )}
 
         {/* WORKING DOG */}
-        {(!searching || filtered.wd.length > 0) && (
-        <CategorySection title="Working Dog" count={catCounts.wd} open={searching ? true : openCats.wd} onToggle={() => toggleCat("wd")}>
-          {filtered.wd.map((row, i) => (
+        <CategorySection title="Working Dog" count={catCounts.wd} open={openCats.wd} onToggle={() => toggleCat("wd")}>
+          {WD.map((row, i) => (
             <WDProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />
           ))}
         </CategorySection>
-        )}
 
         {/* GOLDLINE */}
-        {(!searching || filtered.gl.length > 0) && (
-        <CategorySection title="Goldline" count={catCounts.gl} open={searching ? true : openCats.gl} onToggle={() => toggleCat("gl")}>
-          {filtered.gl.map((row, i) => (
+        <CategorySection title="Goldline" count={catCounts.gl} open={openCats.gl} onToggle={() => toggleCat("gl")}>
+          {GL.map((row, i) => (
             <GLProduct key={i} name={row[0]} sku={row[1]} price={row[2]} quantities={quantities} setQty={setQty} baseTotals={baseTotals} />
           ))}
         </CategorySection>
-        )}
 
         {/* COLD PRESSED */}
-        {(!searching || filtered.cp.length > 0) && (
-        <CategorySection title="Cold Pressed" count={catCounts.cp} open={searching ? true : openCats.cp} onToggle={() => toggleCat("cp")}>
-          {filtered.cp.map(g => (
+        <CategorySection title="Cold Pressed" count={catCounts.cp} open={openCats.cp} onToggle={() => toggleCat("cp")}>
+          {cpGroups.map(g => (
             <ProteinGroup key={g.key} label={g.label} accent={g.accent} bg={g.bg}>
               {g.items.map((row, i) => (
                 <CPProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} />
@@ -1086,12 +1142,10 @@ export default function App() {
             </ProteinGroup>
           ))}
         </CategorySection>
-        )}
 
         {/* WET TRAYS */}
-        {(!searching || filtered.wt.length > 0) && (
-        <CategorySection title="Wet Trays" count={catCounts.wt} open={searching ? true : openCats.wt} onToggle={() => toggleCat("wt")}>
-          {filtered.wt.map(g => (
+        <CategorySection title="Wet Trays" count={catCounts.wt} open={openCats.wt} onToggle={() => toggleCat("wt")}>
+          {wtGroups.map(g => (
             <ProteinGroup key={g.key} label={g.label} protein={g.key}>
               {g.items.map((row, i) => (
                 <WTProduct key={i} row={row} quantities={quantities} setQty={setQty} />
@@ -1099,50 +1153,40 @@ export default function App() {
             </ProteinGroup>
           ))}
         </CategorySection>
-        )}
 
         {/* SUPER PREMIUM WET TRAYS */}
-        {(!searching || filtered.spwt.length > 0) && (
-        <CategorySection title="Super Premium Wet Trays" count={catCounts.spwt} open={searching ? true : openCats.spwt} onToggle={() => toggleCat("spwt")}>
-          {!searching && <div style={{ padding: "4px 16px 2px", fontSize: 11, color: colors.textMid }}>VAT only — 9x300g trays</div>}
-          {filtered.spwt.map((row, i) => (
+        <CategorySection title="Super Premium Wet Trays" count={catCounts.spwt} open={openCats.spwt} onToggle={() => toggleCat("spwt")}>
+          <div style={{ padding: "4px 16px 2px", fontSize: 11, color: colors.textMid }}>VAT only — 9x300g trays</div>
+          {SPWT.map((row, i) => (
             <SimpleProduct key={i} name={row[0]} sku={row[1]} price={row[2]} size="9x300g" quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
-        )}
 
         {/* TREATS (combined — retail, bulk bag, bulk box side by side) */}
-        {(!searching || filtered.treats.length > 0) && (
-        <CategorySection title="Treats" count={catCounts.treats} open={searching ? true : openCats.treats} onToggle={() => toggleCat("treats")}>
-          {filtered.treats.map((group, i) => (
+        <CategorySection title="Treats" count={catCounts.treats} open={openCats.treats} onToggle={() => toggleCat("treats")}>
+          {TREATS.map((group, i) => (
             <TreatGroup key={i} group={group} quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
-        )}
 
         {/* PERO / TRULINE (Premium — High Meat range + Truline).
             Premiwm/Active/Maintenance live in Working Dog above. */}
-        {(!searching || filtered.pero.length > 0) && (
-        <CategorySection title="Pero / Truline (Premium)" count={catCounts.pero} open={searching ? true : openCats.pero} onToggle={() => toggleCat("pero")}>
-          {filtered.pero.map((row, i) => (
+        <CategorySection title="Pero / Truline (Premium)" count={catCounts.pero} open={openCats.pero} onToggle={() => toggleCat("pero")}>
+          {PERO.map((row, i) => (
             <PeroProduct key={i} row={row} vat={vat} quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
-        )}
 
         {/* MEAL TOPPERS */}
-        {(!searching || filtered.mt.length > 0) && (
-        <CategorySection title="Meal Toppers" count={catCounts.mt} open={searching ? true : openCats.mt} onToggle={() => toggleCat("mt")}>
-          {filtered.mt.map((row, i) => (
+        <CategorySection title="Meal Toppers" count={catCounts.mt} open={openCats.mt} onToggle={() => toggleCat("mt")}>
+          {MT.map((row, i) => (
             <SimpleProduct key={i} name={row[0]} sku={row[1]} price={row[3]} size={row[2]} quantities={quantities} setQty={setQty} />
           ))}
         </CategorySection>
-        )}
 
         {/* CAT */}
-        {(!searching || filtered.catDry.length > 0 || filtered.catCan) && (
-        <CategorySection title="Cat" count={catCounts.cat} open={searching ? true : openCats.cat} onToggle={() => toggleCat("cat")}>
-          {filtered.catDry.map((row, i) => (
+        <CategorySection title="Cat" count={catCounts.cat} open={openCats.cat} onToggle={() => toggleCat("cat")}>
+          {CAT_DRY.map((row, i) => (
             <ProductRow
               key={i}
               name={row[0]}
@@ -1155,7 +1199,6 @@ export default function App() {
               baseTotals={baseTotals}
             />
           ))}
-          {filtered.catCan && (
           <ProductRow
             name={CAT_CAN.name}
             cells={[
@@ -1166,15 +1209,12 @@ export default function App() {
             setQty={setQty}
             baseTotals={baseTotals}
           />
-          )}
         </CategorySection>
-        )}
 
         {/* COLLAPSE/EXPAND ALL */}
-        {!searching && (
         <div style={{ display: "flex", gap: 8, padding: "16px 12px" }}>
           <button onClick={() => {
-            const allCats = ['gf', 'wgf', 'wd', 'gl', 'cp', 'wt', 'spwt', 'treats', 'pero', 'mt', 'cat'];
+            const allCats = ['deals', 'gf', 'wgf', 'wd', 'gl', 'cp', 'wt', 'spwt', 'treats', 'pero', 'mt', 'cat'];
             setOpenCats(allCats.reduce((acc, cat) => ({ ...acc, [cat]: true }), {}));
           }} style={{ flex: 1, ...s.reviewBtn }}>
             Expand All
@@ -1183,7 +1223,6 @@ export default function App() {
             Collapse All
           </button>
         </div>
-        )}
 
       </div>
 
@@ -1247,7 +1286,7 @@ export default function App() {
                 <tbody>
                   {orderList.map(i => (
                     <tr key={i.sku}>
-                      <td style={{ ...s.td, fontFamily: "monospace", fontSize: 11 }}>{i.sku.replace(/-PLT$/, "")}</td>
+                      <td style={{ ...s.td, fontFamily: "monospace", fontSize: 11 }}>{stripKey(i.sku)}</td>
                       <td style={s.td}>{i.qty}</td>
                       <td style={s.td}>{i.desc}</td>
                       <td style={s.td}>{i.price > 0 ? `£${i.price.toFixed(2)}` : "TBC"}</td>
