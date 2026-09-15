@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef, memo } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect, memo } from "react";
 
 // ── PRODUCT DATA ──
 const GF = [
@@ -240,33 +240,56 @@ const TREATS = [
 ["Beef Leg Bone",[["TRT119","25pcs",38.00]]]
 ];
 
-// SKU → category label, built once from the data, for grouping the emailed order.
-const SKU_CATEGORY = (() => {
+// SKU → category label, built from a data set, for grouping the emailed order.
+function buildSkuCategory(d) {
   const map = {};
   const add = (sku, cat) => { if (sku) map[sku] = cat; };
-  GF.forEach(r => [2,3,4,5,6,7,8,9].forEach(i => add(r[i], "Grain Free")));
-  WGF.forEach(r => [2,3,4,5,6,7,8,9].forEach(i => add(r[i], "Gluten Free")));
-  CP.forEach(r => [2,3,4].forEach(i => { add(r[i], "Cold Pressed"); add(r[i] + "V", "Cold Pressed"); }));
-  WD.forEach(r => { add(r.wd, "Working Dog"); add(r.vat, "Working Dog"); });
-  GL.forEach(r => add(r[1], "Goldline"));
-  WT.forEach(r => { add(r[2], "Wet Trays"); add(r[2] + "V", "Wet Trays"); });
-  SPWT.forEach(r => add(r[1], "Super Premium Wet Trays"));
-  TREATS.forEach(g => g[1].forEach(([sku]) => add(sku, "Treats")));
-  PERO.forEach(r => [1,2].forEach(i => String(r[i]).split("|").forEach(sk => add(sk, "Pero / Truline"))));
-  MT.forEach(r => add(r[1], "Meal Toppers"));
-  CAT_DRY.forEach(r => { add(r[1], "Cat"); add(r[4], "Cat"); });
-  add(CAT_CAN.sku, "Cat");
+  d.GF.forEach(r => [2,3,4,5,6,7,8,9].forEach(i => add(r[i], "Grain Free")));
+  d.WGF.forEach(r => [2,3,4,5,6,7,8,9].forEach(i => add(r[i], "Gluten Free")));
+  d.CP.forEach(r => [2,3,4].forEach(i => { add(r[i], "Cold Pressed"); add(r[i] + "V", "Cold Pressed"); }));
+  d.WD.forEach(r => { add(r.wd, "Working Dog"); add(r.vat, "Working Dog"); });
+  d.GL.forEach(r => add(r[1], "Goldline"));
+  d.WT.forEach(r => { add(r[2], "Wet Trays"); add(r[2] + "V", "Wet Trays"); });
+  d.SPWT.forEach(r => add(r[1], "Super Premium Wet Trays"));
+  d.TREATS.forEach(g => g[1].forEach(([sku]) => add(sku, "Treats")));
+  d.PERO.forEach(r => [1,2].forEach(i => String(r[i]).split("|").forEach(sk => add(sk, "Pero / Truline"))));
+  d.MT.forEach(r => add(r[1], "Meal Toppers"));
+  d.CAT_DRY.forEach(r => { add(r[1], "Cat"); add(r[4], "Cat"); });
+  add(d.CAT_CAN.sku, "Cat");
   return map;
-})();
+}
 
-function categoryOf(sku) {
+function categoryOf(map, sku) {
   if (sku.endsWith("-DEAL")) return "Deals";
   const k = stripKey(sku);
-  return SKU_CATEGORY[k] || SKU_CATEGORY[k.replace(/V$/, "")] || "Other";
+  return map[k] || map[k.replace(/V$/, "")] || "Other";
 }
 
 // Order categories appear in the emailed order.
 const CATEGORY_ORDER = ["Deals", "Grain Free", "Gluten Free", "Working Dog", "Goldline", "Cold Pressed", "Wet Trays", "Super Premium Wet Trays", "Treats", "Pero / Truline", "Meal Toppers", "Cat", "Other"];
+
+// ── DATA SET (defaults + admin overrides) ──
+// The built-in arrays above are the defaults. The app then layers on, in order:
+//   1. /products.json  — published data (export from Admin, commit to /public). Reaches all reps.
+//   2. localStorage    — the admin's own in-progress edits on this device (preview before publishing).
+const DEFAULT_DATA = { GF, WGF, CP, WD, GL, WT, SPWT, PERO, MT, CAT_DRY, CAT_CAN, TREATS, DEALS, DEALS_INFO };
+const DATA_KEYS = Object.keys(DEFAULT_DATA);
+const LS_KEY = "pero_admin_data_v1";
+const ADMIN_PIN = "2026"; // change me — stops reps wandering into the editor by accident
+
+function mergeData(base, patch) {
+  if (!patch || typeof patch !== "object") return base;
+  const out = { ...base };
+  DATA_KEYS.forEach(k => { if (patch[k] !== undefined) out[k] = patch[k]; });
+  return out;
+}
+function loadLocalData() {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = window.localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
 
 
 // ── SKU RESOLUTION ──
@@ -402,9 +425,23 @@ function carriageCalc(weight, value) {
   return { sku: "PS1", desc: `Full pallet x${pallets}`, cost: 63 * pallets, qty: pallets };
 }
 
+// ── GLOBAL iOS FEEL (press feedback, focus rings) — inline styles can't do :active/:focus ──
+if (typeof document !== "undefined" && !document.querySelector("style[data-pero-global]")) {
+  const st = document.createElement("style");
+  st.setAttribute("data-pero-global", "true");
+  st.textContent = `
+    * { -webkit-tap-highlight-color: transparent; }
+    button { transition: opacity .12s ease, transform .12s ease; }
+    button:active { opacity: .72; transform: scale(.97); }
+    input:focus, textarea:focus, select:focus { outline: none; box-shadow: 0 0 0 3px rgba(26,104,71,.18); }
+    ::selection { background: rgba(26,104,71,.18); }
+  `;
+  document.head.appendChild(st);
+}
+
 // ── STYLES ──
 const colors = {
-  bg: "#F2F2F7",          // iOS grouped background (soft, not harsh white)
+  bg: "#F3F5F1",          // soft warm off-white with a hint of sage — easier on the eye than cool grey
   card: "#FFFFFF",
   primary: "#1A6847",     // Pero green (app tint)
   primaryLight: "#E7F2EC",
@@ -464,7 +501,7 @@ const getProteinAccent = (protein) => {
 
 const s = {
   page: { fontFamily, background: colors.bg, color: colors.text, minHeight: "100vh", paddingBottom: 96, fontSize: 16, lineHeight: 1.4, WebkitFontSmoothing: "antialiased" },
-  header: { background: colors.primary, color: "#fff", padding: "calc(20px + env(safe-area-inset-top)) 16px 16px", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 rgba(0,0,0,0.04)" },
+  header: { background: "linear-gradient(180deg, #1F7A54 0%, #1A6847 100%)", color: "#fff", padding: "calc(20px + env(safe-area-inset-top)) 16px 16px", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 0 rgba(0,0,0,0.06)" },
   headerTitle: { fontSize: 26, fontWeight: 700, letterSpacing: -0.5, margin: 0, fontFamily },
   headerSub: { fontSize: 13, opacity: 0.85, marginTop: 2, fontFamily },
   section: { padding: "0 16px", marginTop: 18 },
@@ -480,7 +517,7 @@ const s = {
   catBadge: (n) => ({ fontSize: 12, fontWeight: 600, background: n > 0 ? colors.primary : colors.segBg, color: n > 0 ? "#fff" : colors.textMid, borderRadius: 20, padding: "2px 9px", minWidth: 20, textAlign: "center", fontFamily }),
   catBody: { background: "#fff", borderRadius: "0 0 14px 14px", boxShadow: "0 1px 2px rgba(0,0,0,0.04)", padding: "2px 0 0", overflow: "hidden" },
   groupLine: (accent, bg) => ({ fontSize: 12, fontWeight: 700, color: accent, padding: "9px 16px 9px 12px", letterSpacing: 0.3, fontFamily, textTransform: "none", background: bg, borderLeft: `3px solid ${accent}` }),
-  productRow: (bg) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 16px", gap: 8, borderBottom: `0.5px solid ${colors.border}`, background: bg || "#fff" }),
+  productRow: (bg) => ({ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 16px", gap: 8, borderBottom: `0.5px solid ${colors.border}`, background: bg || "#fff" }),
   productName: { fontSize: 15, fontWeight: 500, flex: 1, lineHeight: 1.3, fontFamily, letterSpacing: -0.1 },
   sizeGroup: { display: "flex", gap: 8, alignItems: "flex-start", flexShrink: 0 },
   sizeBox: { display: "flex", flexDirection: "column", alignItems: "center", gap: 4 },
@@ -494,8 +531,8 @@ const s = {
   stepperPrice: { fontSize: 11, color: colors.text, fontWeight: 600, fontFamily },
   stepperSub: { fontSize: 9.5, color: colors.textMid, fontWeight: 500, fontFamily, marginTop: -2 },
   // Stacked layout: product name on its own line, size counters wrap below within the frame
-  stackedRow: { padding: "11px 16px", borderBottom: `0.5px solid ${colors.border}` },
-  stackedSizes: { display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8, justifyContent: "flex-start" },
+  stackedRow: { padding: "9px 16px", borderBottom: `0.5px solid ${colors.border}` },
+  stackedSizes: { display: "flex", flexWrap: "wrap", gap: 12, marginTop: 6, justifyContent: "flex-start" },
   bottomBar: { position: "fixed", bottom: 0, left: 0, right: 0, background: "rgba(255,255,255,0.94)", backdropFilter: "saturate(180%) blur(20px)", WebkitBackdropFilter: "saturate(180%) blur(20px)", borderTop: `0.5px solid ${colors.border}`, padding: "10px 16px calc(10px + env(safe-area-inset-bottom))", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 200 },
   reviewBtn: { background: colors.primary, color: "#fff", border: "none", borderRadius: 12, padding: "13px 20px", fontSize: 16, fontWeight: 600, cursor: "pointer", fontFamily, letterSpacing: -0.2, WebkitTapHighlightColor: "transparent" },
   modal: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 300, display: "flex", alignItems: "flex-end", justifyContent: "center" },
@@ -849,6 +886,196 @@ function groupWTByProtein(products) {
   return order.filter(k => groups[k]).map(k => ({ key: k, label: labels[k], items: groups[k] }));
 }
 
+// ── ADMIN EDITOR ──
+// Schema-driven: each category lists its editable fields with get/set accessors, so one
+// generic table component edits every data shape (positional arrays, objects, nested treats).
+const A = (i, l, t = "text", w = 110) => ({ l, t, w, get: r => r[i], set: (r, v) => { const n = [...r]; n[i] = v; return n; } });
+const O = (k, l, t = "text", w = 110) => ({ l, t, w, get: r => r[k], set: (r, v) => ({ ...r, [k]: v }) });
+const TS = (n, part, l, t = "text", w = 90) => ({ l, t, w,
+  get: r => (r[1][n] ? r[1][n][part] : (part === 2 ? 0 : "")),
+  set: (r, v) => { const sizes = r[1].map(x => [...x]); while (sizes.length <= n) sizes.push(["", "", 0]); sizes[n][part] = v; return [r[0], sizes]; },
+});
+const PROTEINS = ["chicken","beef","salmon","duck","turkey","lamb","pork","mixed","rabbit","insect"];
+const ADMIN_SCHEMA = [
+  { key:"deals", label:"Deals", dataKey:"DEALS", blank:() => ({ name:"", size:"12kg", was:0, now:0, pct:0, kind:"matrix", coloured:"", paper:"", base:"", sku:"" }),
+    fields:[ O("name","Name","text",220), O("size","Size","text",70), O("was","Was £","num",80), O("now","Now £","num",80), O("pct","% off","num",60),
+      { ...O("kind","Kind","select",90), opts:["matrix","cp","gl"] }, O("coloured","Coloured SKU","text",110), O("paper","Paper SKU","text",110), O("base","CP base SKU","text",100), O("sku","GL SKU","text",90) ] },
+  { key:"gf", label:"Grain Free", dataKey:"GF", blank:() => ["","chicken","","","","","","","","",0,0],
+    fields:[ A(0,"Name","text",230), { ...A(1,"Protein","select",90), opts:PROTEINS }, A(10,"2kg £","num",75), A(11,"12kg £","num",75),
+      A(2,"Col 2kg","text",85), A(3,"Paper 2kg","text",85), A(4,"Col 2kg V","text",85), A(5,"Paper 2kg V","text",85),
+      A(6,"Col 12kg","text",85), A(7,"Paper 12kg","text",85), A(8,"Col 12kg V","text",85), A(9,"Paper 12kg V","text",85) ] },
+  { key:"wgf", label:"Gluten Free", dataKey:"WGF", blank:() => ["","chicken","","","","","","","","",0,0],
+    fields:[ A(0,"Name","text",230), { ...A(1,"Protein","select",90), opts:PROTEINS }, A(10,"Small £","num",75), A(11,"12kg £","num",75),
+      A(2,"Col small","text",85), A(3,"Paper small","text",85), A(4,"Col small V","text",85), A(5,"Paper small V","text",85),
+      A(6,"Col 12kg","text",85), A(7,"Paper 12kg","text",85), A(8,"Col 12kg V","text",85), A(9,"Paper 12kg V","text",85) ] },
+  { key:"wd", label:"Working Dog", dataKey:"WD", blank:() => ({ name:"", wd:"", vat:"", price:0, size:"15kg", pallet:65 }),
+    fields:[ O("name","Name","text",220), O("wd","WD SKU","text",90), O("vat","VAT SKU","text",90), O("price","Price £","num",80), O("size","Size","text",70), O("pallet","Bags/pallet","num",80), O("caseWeight","Case kg","num",70),
+      O("priceBig","Pero big £","num",80), O("sizeBig","Pero big size","text",80) ] },
+  { key:"gl", label:"Goldline", dataKey:"GL", blank:() => ["","",0,"pallet"], fields:[ A(0,"Name","text",260), A(1,"SKU","text",100), A(2,"15kg £","num",80) ] },
+  { key:"cp", label:"Cold Pressed", dataKey:"CP", blank:() => ["","mixed","","","",0,0,0],
+    fields:[ A(0,"Name","text",230), { ...A(1,"Protein","select",90), opts:PROTEINS }, A(2,"2kg SKU","text",85), A(5,"2kg £","num",75), A(3,"5kg SKU","text",85), A(6,"5kg £","num",75), A(4,"12kg SKU","text",85), A(7,"12kg £","num",75) ] },
+  { key:"wt", label:"Wet Trays", dataKey:"WT", blank:() => ["","chicken","",0],
+    fields:[ A(0,"Name","text",260), { ...A(1,"Protein","select",90), opts:["chicken","salmon","duck","turkey","lamb"] }, A(2,"SKU","text",100), A(3,"Case £","num",80) ] },
+  { key:"spwt", label:"Super Premium Wet", dataKey:"SPWT", blank:() => ["","",0], fields:[ A(0,"Name","text",260), A(1,"SKU","text",100), A(2,"Case £","num",80) ] },
+  { key:"treats", label:"Treats", dataKey:"TREATS", blank:() => ["",[["","",0]]],
+    fields:[ A(0,"Name","text",220), TS(0,0,"Size 1 SKU"), TS(0,1,"Size 1","text",70), TS(0,2,"£","num",70), TS(1,0,"Size 2 SKU"), TS(1,1,"Size 2","text",70), TS(1,2,"£","num",70), TS(2,0,"Size 3 SKU"), TS(2,1,"Size 3","text",70), TS(2,2,"£","num",70) ] },
+  { key:"pero", label:"Pero / Truline", dataKey:"PERO", blank:() => ["","","",0,0,"2kg","12kg","vat"],
+    fields:[ A(0,"Name","text",230), A(1,"Small SKU","text",120), A(3,"Small £","num",75), A(5,"Small size","text",70), A(2,"Big SKU","text",120), A(4,"Big £","num",75), A(6,"Big size","text",70), { ...A(7,"VAT type","select",80), opts:["vat","both","wd"] } ] },
+  { key:"mt", label:"Meal Toppers", dataKey:"MT", blank:() => ["","","7x160g",0], fields:[ A(0,"Name","text",240), A(1,"SKU","text",110), A(2,"Size","text",80), A(3,"£","num",80) ] },
+  { key:"cat", label:"Cat", dataKey:"CAT_DRY", blank:() => ["","","2kg",0,"","10kg",0],
+    fields:[ A(0,"Name","text",200), A(1,"Small SKU","text",90), A(2,"Small size","text",70), A(3,"Small £","num",75), A(4,"Big SKU","text",90), A(5,"Big size","text",70), A(6,"Big £","num",75) ],
+    extra:{ dataKey:"CAT_CAN", label:"Cat cans", fields:[ O("name","Name","text",220), O("sku","SKU","text",90), O("price","Case £","num",80), O("pallet","Cases/pallet","num",90), O("caseWeight","Case kg","num",70) ] } },
+];
+
+// Drop fully-empty treat size slots created while editing.
+function normalizeData(d) {
+  return { ...d, TREATS: d.TREATS.map(([n, sizes]) => [n, sizes.filter(s => s[0] || s[1] || (s[2] && s[2] > 0))]) };
+}
+
+const ad = {
+  overlay: { position: "fixed", inset: 0, background: "#F3F4F1", zIndex: 500, overflow: "auto", fontFamily, color: colors.text },
+  top: { position: "sticky", top: 0, zIndex: 2, background: "#fff", borderBottom: `1px solid ${colors.border}`, padding: "12px 20px", display: "flex", alignItems: "center", gap: 12 },
+  btn: (kind) => ({ padding: "8px 14px", borderRadius: 9, border: "none", fontWeight: 600, fontSize: 13, cursor: "pointer", fontFamily,
+    background: kind === "primary" ? colors.primary : kind === "danger" ? colors.dangerLight : colors.segBg,
+    color: kind === "primary" ? "#fff" : kind === "danger" ? colors.danger : colors.text }),
+  body: { display: "flex", gap: 20, padding: 20, alignItems: "flex-start" },
+  nav: { width: 200, flexShrink: 0, background: "#fff", borderRadius: 12, padding: 6, boxShadow: "0 1px 2px rgba(0,0,0,0.04)", position: "sticky", top: 70 },
+  navItem: (active) => ({ padding: "9px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: active ? 600 : 500, background: active ? colors.primaryLight : "transparent", color: active ? colors.primary : colors.text }),
+  main: { flex: 1, minWidth: 0 },
+  card: { background: "#fff", borderRadius: 12, boxShadow: "0 1px 2px rgba(0,0,0,0.04)", overflow: "auto", marginBottom: 16 },
+  table: { borderCollapse: "collapse", fontSize: 13, minWidth: "100%" },
+  th: { textAlign: "left", padding: "10px 8px", fontSize: 11, fontWeight: 700, color: colors.textMid, textTransform: "uppercase", letterSpacing: 0.4, borderBottom: `1px solid ${colors.border}`, whiteSpace: "nowrap", background: "#FAFAF8", position: "sticky", top: 0 },
+  td: { padding: "4px 6px", borderBottom: `1px solid ${colors.bg}`, verticalAlign: "middle" },
+  input: (w) => ({ width: w, padding: "7px 8px", border: `1px solid ${colors.border}`, borderRadius: 7, fontSize: 13, fontFamily, background: "#fff", boxSizing: "border-box" }),
+  pill: (ok) => ({ fontSize: 12, fontWeight: 600, padding: "3px 9px", borderRadius: 20, background: ok ? colors.primaryLight : "#FFF4E5", color: ok ? colors.primary : "#B25E00" }),
+};
+
+// Uncontrolled input that commits on blur / Enter — smooth typing, no caret fights.
+function Cell({ field, row, onCommit }) {
+  const val = field.get(row);
+  if (field.t === "select") {
+    return (
+      <select style={ad.input(field.w)} value={val ?? ""} onChange={e => onCommit(field.set(row, e.target.value))}>
+        {field.opts.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    );
+  }
+  const commit = (e) => {
+    const raw = e.target.value;
+    if (field.t === "num") {
+      const n = parseFloat(raw);
+      const next = isNaN(n) ? 0 : n;
+      if (next !== (val ?? 0)) onCommit(field.set(row, next));
+    } else if (raw !== (val ?? "")) {
+      onCommit(field.set(row, raw));
+    }
+  };
+  return (
+    <input
+      style={ad.input(field.w)}
+      defaultValue={val ?? ""}
+      type={field.t === "num" ? "number" : "text"}
+      step={field.t === "num" ? "0.01" : undefined}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
+    />
+  );
+}
+
+function AdminTable({ title, fields, rows, single, onChange, version, onAdd, onRemove }) {
+  return (
+    <div style={ad.card}>
+      <div style={{ padding: "12px 14px 4px", fontWeight: 700, fontSize: 15 }}>{title} <span style={{ color: colors.textMid, fontWeight: 500, fontSize: 12 }}>· {rows.length} {single ? "" : "rows"}</span></div>
+      <table style={ad.table}>
+        <thead><tr>{fields.map((f, i) => <th key={i} style={ad.th}>{f.l}</th>)}{!single && <th style={ad.th}></th>}</tr></thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={`${version}-${ri}`}>
+              {fields.map((f, fi) => <td key={fi} style={ad.td}><Cell field={f} row={row} onCommit={next => onChange(ri, next)} /></td>)}
+              {!single && <td style={ad.td}><button onClick={() => onRemove(ri)} title="Remove" style={{ ...ad.btn("danger"), padding: "5px 9px" }}>✕</button></td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!single && <div style={{ padding: 12 }}><button onClick={onAdd} style={ad.btn("primary")}>+ Add row</button></div>}
+    </div>
+  );
+}
+
+function AdminPanel({ data, commit, published, hasLocalEdits, onClose, adminCat, setAdminCat, discardLocal }) {
+  const [version, setVersion] = useState(0);
+  const schema = ADMIN_SCHEMA.find(s => s.key === adminCat);
+  const rows = data[schema.dataKey];
+
+  const setList = (key, list) => commit({ ...data, [key]: list });
+  const onChange = (i, next) => setList(schema.dataKey, rows.map((r, ri) => (ri === i ? next : r)));
+  const onAdd = () => { setList(schema.dataKey, [...rows, schema.blank()]); setVersion(v => v + 1); };
+  const onRemove = (i) => { if (window.confirm("Remove this row?")) { setList(schema.dataKey, rows.filter((_, ri) => ri !== i)); setVersion(v => v + 1); } };
+
+  const exportJson = () => {
+    const out = {};
+    DATA_KEYS.forEach(k => { out[k] = data[k]; });
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = "products.json"; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+
+  return (
+    <div style={ad.overlay}>
+      <div style={ad.top}>
+        <div style={{ fontWeight: 700, fontSize: 18, letterSpacing: -0.3 }}>Pero Admin</div>
+        <span style={ad.pill(!hasLocalEdits)}>{hasLocalEdits ? "Unpublished local edits" : (published ? "In sync with published" : "Using built-in defaults")}</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={exportJson} style={ad.btn("primary")}>Export products.json</button>
+        {hasLocalEdits && <button onClick={() => { if (window.confirm("Discard all local edits and reload the published data?")) { discardLocal(); setVersion(v => v + 1); } }} style={ad.btn("danger")}>Discard local edits</button>}
+        <button onClick={onClose} style={ad.btn()}>Close</button>
+      </div>
+
+      <div style={{ padding: "12px 20px 0", fontSize: 13, color: colors.textMid, maxWidth: 900 }}>
+        Edits save automatically on this device. To push them to the reps: <b>Export products.json</b>, upload it to the <code>public/</code> folder in GitHub and commit — the app loads it on next refresh.
+      </div>
+
+      <div style={ad.body}>
+        <div style={ad.nav}>
+          {ADMIN_SCHEMA.map(s => <div key={s.key} style={ad.navItem(s.key === adminCat)} onClick={() => { setAdminCat(s.key); setVersion(v => v + 1); }}>{s.label}</div>)}
+        </div>
+        <div style={ad.main}>
+          {schema.key === "deals" && (
+            <AdminTable title="Deals banner" single fields={[O("title","Title","text",240), O("dates","Dates","text",200)]} rows={[data.DEALS_INFO]} version={version}
+              onChange={(_, next) => commit({ ...data, DEALS_INFO: next })} />
+          )}
+          <AdminTable title={schema.label} fields={schema.fields} rows={rows} version={version} onChange={onChange} onAdd={onAdd} onRemove={onRemove} />
+          {schema.extra && (
+            <AdminTable title={schema.extra.label} single fields={schema.extra.fields} rows={[data[schema.extra.dataKey]]} version={version}
+              onChange={(_, next) => commit({ ...data, [schema.extra.dataKey]: next })} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminGate({ onOk, onCancel }) {
+  const [pin, setPin] = useState("");
+  const [bad, setBad] = useState(false);
+  const submit = () => { if (pin === ADMIN_PIN) onOk(); else setBad(true); };
+  return (
+    <div style={{ ...ad.overlay, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ background: "#fff", borderRadius: 14, padding: 24, width: 320, boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Admin access</div>
+        <div style={{ fontSize: 13, color: colors.textMid, marginBottom: 14 }}>Enter the admin PIN to edit products and pricing.</div>
+        <input autoFocus type="password" inputMode="numeric" value={pin} onChange={e => { setPin(e.target.value); setBad(false); }} onKeyDown={e => e.key === "Enter" && submit()} placeholder="PIN" style={{ ...ad.input("100%"), fontSize: 16, padding: 10 }} />
+        {bad && <div style={{ color: colors.danger, fontSize: 12, marginTop: 6 }}>Incorrect PIN</div>}
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button onClick={onCancel} style={{ ...ad.btn(), flex: 1 }}>Cancel</button>
+          <button onClick={submit} style={{ ...ad.btn("primary"), flex: 1 }}>Open</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── MAIN APP ──
 export default function App() {
   const [customerName, setCustomerName] = useState("");
@@ -859,6 +1086,43 @@ export default function App() {
   const [openCats, setOpenCats] = useState({});
   const [showReview, setShowReview] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Product data: defaults → published /products.json → local admin edits.
+  const [data, setData] = useState(() => mergeData(DEFAULT_DATA, loadLocalData()));
+  const [published, setPublished] = useState(null);      // what /products.json currently holds
+  const [hasLocalEdits, setHasLocalEdits] = useState(() => !!loadLocalData());
+  useEffect(() => {
+    let alive = true;
+    fetch("/products.json", { cache: "no-store" })
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => {
+        if (!alive || !json) return;
+        setPublished(json);
+        // Local admin edits win on this device; otherwise show the published set.
+        if (!loadLocalData()) setData(mergeData(DEFAULT_DATA, json));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  // Admin editor
+  const [adminOpen, setAdminOpen] = useState(false);
+  const [adminAuthed, setAdminAuthed] = useState(false);
+  const [adminCat, setAdminCat] = useState("deals");
+  const { GF, WGF, CP, WD, GL, WT, SPWT, PERO, MT, CAT_DRY, CAT_CAN, TREATS, DEALS, DEALS_INFO } = data;
+  const skuCategory = useMemo(() => buildSkuCategory(data), [data]);
+
+  const commitData = useCallback((next) => {
+    const clean = normalizeData(next);
+    setData(clean);
+    setHasLocalEdits(true);
+    try { window.localStorage.setItem(LS_KEY, JSON.stringify(clean)); } catch {}
+  }, []);
+  const discardLocal = useCallback(() => {
+    try { window.localStorage.removeItem(LS_KEY); } catch {}
+    setData(mergeData(DEFAULT_DATA, published));
+    setHasLocalEdits(false);
+  }, [published]);
 
   const setQty = useCallback((sku, qty, price, desc, weight) => {
     setOrderItems(prev => {
@@ -927,10 +1191,10 @@ export default function App() {
     c.pero = base.filter(i => /^P00(38|39|40|37|18|19|71|72|73|74|75|76|77|78|79|80|81|82)/.test(i.sku) || i.sku.startsWith("TRU")).reduce((s,i) => s + i.qty, 0);
     c.cat = base.filter(i => ["SR0215","SR0164","C0005"].some(p => i.sku.startsWith(p))).reduce((s,i) => s + i.qty, 0);
     return c;
-  }, [orderList]);
+  }, [orderList, GF, WGF, WT]);
 
-  const gfGroups = useMemo(() => groupByProtein(GF), []);
-  const wgfGroups = useMemo(() => groupByProtein(WGF), []);
+  const gfGroups = useMemo(() => groupByProtein(GF), [GF]);
+  const wgfGroups = useMemo(() => groupByProtein(WGF), [WGF]);
   const cpGroups = useMemo(() => ([
     { key: "8020", label: "80/20 Recipes", accent: "#1a6847", bg: "#e8f5ee",
       items: CP.filter(r => r[0].startsWith("80/20")) },
@@ -938,8 +1202,8 @@ export default function App() {
       items: CP.filter(r => /with Grain/i.test(r[0])) },
     { key: "other", label: "Other Recipes", accent: "#5a6b73", bg: "#eef1f2",
       items: CP.filter(r => !r[0].startsWith("80/20") && !/with Grain/i.test(r[0])) },
-  ]), []);
-  const wtGroups = useMemo(() => groupWTByProtein(WT), []);
+  ]), [CP]);
+  const wtGroups = useMemo(() => groupWTByProtein(WT), [WT]);
 
   const buildOrderText = useCallback(() => {
     // Build as HTML table for better paste formatting
@@ -988,7 +1252,7 @@ export default function App() {
     // Group the order lines by category, in a fixed order, with a gap between each.
     const groups = {};
     orderList.forEach(i => {
-      const cat = categoryOf(i.sku);
+      const cat = categoryOf(skuCategory, i.sku);
       (groups[cat] = groups[cat] || []).push(i);
     });
     CATEGORY_ORDER.filter(cat => groups[cat]).forEach((cat, gi) => {
@@ -1014,7 +1278,7 @@ export default function App() {
 
     const recipients = "info@pero-petfood.co.uk,dafydd@pero-petfood.co.uk";
     return `mailto:${recipients}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(L.join("\n"))}`;
-  }, [customerName, packaging, vat, notes, orderList, carriage, totalNet, totalWeight, totalItems]);
+  }, [customerName, packaging, vat, notes, orderList, carriage, totalNet, totalWeight, totalItems, skuCategory]);
 
   const handleCopy = useCallback(() => {
     const html = buildOrderText();
@@ -1224,6 +1488,12 @@ export default function App() {
           </button>
         </div>
 
+        <div style={{ textAlign: "center", padding: "4px 0 12px" }}>
+          <button onClick={() => setAdminOpen(true)} style={{ background: "none", border: "none", color: colors.textLight, fontSize: 12, cursor: "pointer", fontFamily, padding: 8 }}>
+            Admin{hasLocalEdits ? " · unpublished edits" : ""}
+          </button>
+        </div>
+
       </div>
 
       {/* STICKY BOTTOM BAR */}
@@ -1339,6 +1609,23 @@ export default function App() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* ADMIN */}
+      {adminOpen && !adminAuthed && (
+        <AdminGate onOk={() => setAdminAuthed(true)} onCancel={() => setAdminOpen(false)} />
+      )}
+      {adminOpen && adminAuthed && (
+        <AdminPanel
+          data={data}
+          commit={commitData}
+          published={published}
+          hasLocalEdits={hasLocalEdits}
+          onClose={() => setAdminOpen(false)}
+          adminCat={adminCat}
+          setAdminCat={setAdminCat}
+          discardLocal={discardLocal}
+        />
       )}
     </div>
   );
